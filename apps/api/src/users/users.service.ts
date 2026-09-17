@@ -10,6 +10,16 @@ import { hoursToSeconds, normalizeEmail, normalizePhone } from '../common/time';
 import { BillingService } from '../sessions/billing.service';
 import { CreateUserDto, ListUsersQuery, UpdateUserDto } from './users.dto';
 
+/**
+ * A query is searched against phones only when it actually looks like a phone number.
+ * Otherwise "giogiokaki2@gmail.com" would be reduced to its digits ("2") and match
+ * every customer whose number contains a 2.
+ */
+function phoneQuery(search: string) {
+  const compact = search.replace(/[\s()\-]/g, '');
+  return /^\+?\d{3,}$/.test(compact) ? compact.replace(/\D/g, '') : null;
+}
+
 const activeSessionInclude = {
   sessions: { where: { status: SessionStatus.ACTIVE }, include: { pc: true }, take: 1 },
 } satisfies Prisma.UserInclude;
@@ -23,6 +33,7 @@ export class UsersService {
   ) {}
 
   async list(q: ListUsersQuery) {
+    const phoneDigits = q.search ? phoneQuery(q.search) : null;
     const where: Prisma.UserWhereInput = {
       deletedAt: null,
       ...(q.status === 'active' ? { isActive: true } : q.status === 'inactive' ? { isActive: false } : {}),
@@ -32,7 +43,7 @@ export class UsersService {
               { name: { contains: q.search, mode: 'insensitive' } },
               { username: { contains: q.search, mode: 'insensitive' } },
               { email: { contains: q.search, mode: 'insensitive' } },
-              { phone: { contains: normalizePhone(q.search) || q.search } },
+              ...(phoneDigits ? [{ phone: { contains: phoneDigits } }] : []),
             ],
           }
         : {}),

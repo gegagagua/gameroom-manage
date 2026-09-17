@@ -156,6 +156,22 @@ describe('Game Room API (e2e)', () => {
         .expect(201);
     });
 
+    it('searches phones only for phone-like queries', async () => {
+      const n = Math.floor(Math.random() * 1e6);
+      const withPhone = await createUser({ phone: `+99559900${n % 100}2` });
+      const other = await createUser({ email: `mail2addr${n}@test.local`, phone: null });
+
+      // an email is not a phone: its digits must not leak into the phone clause
+      const byEmail = await admin.get('/api/users').query({ search: other.email }).expect(200);
+      const ids = byEmail.body.items.map((i: { id: number }) => i.id);
+      expect(ids).toEqual([other.id]);
+      expect(ids).not.toContain(withPhone.id);
+
+      // a real phone fragment still matches, spaces/dashes and all
+      const byPhone = await admin.get('/api/users').query({ search: withPhone.phone.slice(1, 9) }).expect(200);
+      expect(byPhone.body.items.map((i: { id: number }) => i.id)).toContain(withPhone.id);
+    });
+
     it('lists, searches, updates and soft-deletes', async () => {
       const u = await createUser({ name: 'Searchable Person' });
       const list = await admin.get('/api/users').query({ search: 'searchable' }).expect(200);
