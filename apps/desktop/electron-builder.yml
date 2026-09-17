@@ -19,7 +19,8 @@ win:
     - target: nsis
       arch: [x64]
   executableName: GameRoomClient
-  artifactName: GameRoomClient-Setup-${version}.${ext}
+  # unversioned so releases/latest/download/GameRoomClient-Setup.exe is a stable link (admin web uses it)
+  artifactName: GameRoomClient-Setup.${ext}
   # launching games / taskkill run as the logged-in Windows user — no elevation at runtime
   requestedExecutionLevel: asInvoker
 nsis:

@@ -10,27 +10,27 @@ export const errorMessages: Record<Lang, Record<string, string>> = {
     UNAUTHORIZED: 'საჭიროა ავტორიზაცია',
     FORBIDDEN: 'წვდომა აკრძალულია',
     NOT_FOUND: 'არ მოიძებნა',
-    CONFLICT: 'კონფლიქტ — ჩანაწერ უკვე არსებობ',
-    TOO_MANY_REQUESTS: 'ზედმეტად ბევრი მცდელობ, სცადეთ მოგვიანებით',
-    INTERNAL: 'სერვერის შეცდომ',
-    NETWORK: 'სერვერთან კავშირი ვერ მოხერხდ',
-    INVALID_CREDENTIALS: 'არასწორი მომხმარებელი ან პაროლ',
+    CONFLICT: 'კონფლიქტ — ჩანაწერი უკვე არსებობს',
+    TOO_MANY_REQUESTS: 'ზედმეტად ბევრი მცდელობა, სცადეთ მოგვიანებით',
+    INTERNAL: 'სერვერის შეცდომა',
+    NETWORK: 'სერვერთან კავშირი ვერ მოხერხდა',
+    INVALID_CREDENTIALS: 'არასწორი მომხმარებელი ან პაროლი',
     WRONG_CURRENT_PASSWORD: 'მიმდინარე პაროლი არასწორია',
     INVALID_RESET_TOKEN: 'ბმული არასწორია ან ვადაგასულია',
     USER_INACTIVE: 'მომხმარებელი დეაქტივირებულია',
     EMAIL_TAKEN: 'ეს ელ. ფოსტა უკვე გამოყენებულია',
     PHONE_TAKEN: 'ეს ტელეფონი უკვე გამოყენებულია',
     USER_NOT_FOUND: 'მომხმარებელი არ მოიძებნა',
-    USER_HAS_ACTIVE_SESSION: 'მომხმარებელ აქვს აქტიური სესი',
-    INSUFFICIENT_BALANCE: 'ბალანსი არ არის საკმარის',
-    NO_BALANCE: 'ბალანსი ცარიელია — მიმართეთ ადმინისტრატორ',
-    INVALID_PC_KEY: 'PC-ის გასაღები არასწორია (პარამეტრებ)',
-    PC_NOT_FOUND: 'ეს PC ნომერი არ არის რეგისტრირებულ',
-    ALREADY_LOGGED_IN_ELSEWHERE: 'მომხმარებელი უკვე შესულია სხვა PC-ზ',
+    USER_HAS_ACTIVE_SESSION: 'მომხმარებელს აქვს აქტიური სესია',
+    INSUFFICIENT_BALANCE: 'ბალანსი არ არის საკმარისი',
+    NO_BALANCE: 'ბალანსი ცარიელია — მიმართეთ ადმინისტრატორს',
+    INVALID_PC_KEY: 'PC-ის გასაღები არასწორია (შეამოწმეთ პარამეტრები)',
+    PC_NOT_FOUND: 'ეს PC ნომერი არ არის რეგისტრირებული',
+    ALREADY_LOGGED_IN_ELSEWHERE: 'მომხმარებელი უკვე შესულია სხვა PC-ზე',
     INVALID_SESSION_TOKEN: 'სესია ვადაგასულია',
-    INVALID_DATE_RANGE: 'თარიღების დიაპაზონ არასწორია',
+    INVALID_DATE_RANGE: 'თარიღების დიაპაზონი არასწორია',
     GAME_NOT_FOUND: 'თამაში არ მოიძებნა',
-    GAME_LAUNCH_CONFIG_INVALID: 'გაშვების პარამეტრ არასწორია: STEAM → Steam App ID, EXE → ფაილის მისამარ, URL → ბმულ',
+    GAME_LAUNCH_CONFIG_INVALID: 'გაშვების პარამეტრები არასწორია: STEAM → Steam App ID, EXE → ფაილის მისამარი, URL → ბმული',
   },
   en: {
     VALIDATION_FAILED: 'Invalid input',
@@ -63,11 +63,11 @@ export const errorMessages: Record<Lang, Record<string, string>> = {
 
 export const endReasonLabels: Record<Lang, Record<SessionEndReason, string>> = {
   ka: {
-    LOGOUT: 'გამოსვლ',
-    BALANCE_DEPLETED: 'ბალანსი ამოიწურ',
-    TIMEOUT: 'კავშირი გაწყდ',
+    LOGOUT: 'გამოსვლა',
+    BALANCE_DEPLETED: 'ბალანსი ამოიწურა',
+    TIMEOUT: 'კავშირი გაწყდა',
     ADMIN_FORCED: 'ადმინის მიერ',
-    REPLACED: 'ჩანაცვლდ',
+    REPLACED: 'ჩანაცვლდა',
   },
   en: {
     LOGOUT: 'Logout',
@@ -79,12 +79,12 @@ export const endReasonLabels: Record<Lang, Record<SessionEndReason, string>> = {
 };
 
 export const transactionTypeLabels: Record<Lang, Record<TransactionType, string>> = {
-  ka: { TOPUP: 'შევსებ', DEDUCTION: 'ჩამოჭრ', SESSION_CHARGE: 'სესი' },
+  ka: { TOPUP: 'შევსება', DEDUCTION: 'ჩამოჭრა', SESSION_CHARGE: 'სესია' },
   en: { TOPUP: 'Top-up', DEDUCTION: 'Deduction', SESSION_CHARGE: 'Session' },
 };
 
 export const alertTypeLabels: Record<Lang, Record<AlertType, string>> = {
-  ka: { LOW_BALANCE: 'ბალანსი იწურებ', BALANCE_DEPLETED: 'ბალანსი ამოიწურ' },
+  ka: { LOW_BALANCE: 'ბალანსი იწურება', BALANCE_DEPLETED: 'ბალანსი ამოიწურა' },
   en: { LOW_BALANCE: 'Low balance', BALANCE_DEPLETED: 'Balance depleted' },
 };
 

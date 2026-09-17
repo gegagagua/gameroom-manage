@@ -53,7 +53,7 @@ Heartbeat-ის body-ში გადაიცემ `currentGame` (ბოლ �
 
 ```bash
 npm run build -w @grm/desktop        # out/ (main, preload, renderer)
-npm run dist:win -w @grm/desktop     # Windows installer → apps/desktop/release/GameRoomClient-Setup-<ver>.exe
+npm run dist:win -w @grm/desktop     # Windows installer → apps/desktop/release/GameRoomClient-Setup.exe
 npm run dist -w @grm/desktop         # მიმდინარე OS-ისთვ (mac dmg / linux AppImage)
 ```
 

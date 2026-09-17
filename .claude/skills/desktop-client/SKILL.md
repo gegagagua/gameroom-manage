@@ -91,6 +91,6 @@ npm run dist -w @grm/desktop        # current OS
 Gotchas:
 - `electron-builder.yml` pins `electronVersion` (electron is hoisted to the workspace root, so a `^` range can't be resolved). Bump it together with the `electron` devDependency.
 - On Apple Silicon without Rosetta, `dist:win` produces `release/win-unpacked/` (valid x64 `GameRoomClient.exe` + `app.asar`) but fails at the installer step: bundled `makensis` is x86_64 → `spawn Unknown system error -86`. Build on Windows/CI, or install Rosetta. `win-unpacked` can be copied to a PC for a quick test.
-- Artifact names derive from the scoped package name (`@grmdesktop-…nsis.7z` for the intermediate payload); the installer uses `artifactName` → `GameRoomClient-Setup-<version>.exe`.
+- Artifact names derive from the scoped package name (`@grmdesktop-…nsis.7z` for the intermediate payload); the installer uses `artifactName` → `GameRoomClient-Setup.exe`.
 
 Packaged build = 100% kiosk window, no devtools/menu, real game launch + taskkill on Windows, real shutdown, autoStart via `app.setLoginItemSettings`. Tell game room admins to run games in borderless/windowed fullscreen so the mini widget stays visible. Real lockdown needs OS help (Windows Assigned Access / shell replacement) — see docs/desktop.md.

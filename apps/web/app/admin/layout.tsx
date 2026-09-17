@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { AlertPoller, useOpenAlerts } from '@/components/alert-poller';
 import { AppShell } from '@/components/app-shell';
 import { useRequireRole } from '@/components/auth-gate';
+import { DesktopDownloadButton } from '@/components/desktop-download';
 import { Loading } from '@/components/ui';
 import { useI18n } from '@/lib/i18n';
 
@@ -14,6 +15,7 @@ function AdminShell({ name, children }: { name: string; children: ReactNode }) {
     <AppShell
       userName={name}
       showNotifications
+      headerExtra={<DesktopDownloadButton />}
       nav={[
         { href: '/admin', label: t('nav.dashboard'), exact: true },
         { href: '/admin/users', label: t('nav.users') },

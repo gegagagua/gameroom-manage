@@ -56,11 +56,13 @@ export function AppShell({
   nav,
   userName,
   showNotifications,
+  headerExtra,
   children,
 }: {
   nav: NavItem[];
   userName: string;
   showNotifications?: boolean;
+  headerExtra?: ReactNode;
   children: ReactNode;
 }) {
   const { t } = useI18n();
@@ -80,7 +82,7 @@ export function AppShell({
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+        <div className="flex w-full flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 lg:px-8">
           <Link href={nav[0]?.href ?? '/'} className="flex items-center gap-2">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-violet-600 to-cyan-500 text-sm font-black text-white">
               GR
@@ -105,6 +107,7 @@ export function AppShell({
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
+            {headerExtra}
             {showNotifications && <NotificationToggle />}
             <LangSwitch />
             <span className="hidden text-sm text-zinc-400 sm:inline">{userName}</span>
@@ -118,7 +121,7 @@ export function AppShell({
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <main className="w-full px-4 py-6 lg:px-8">{children}</main>
     </div>
   );
 }

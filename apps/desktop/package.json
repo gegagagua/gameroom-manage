@@ -1,7 +1,7 @@
 {
   "name": "@grm/desktop",
   "productName": "Game Room Client",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Kiosk client for game room PCs",
   "author": "Game Room",

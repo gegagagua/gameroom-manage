@@ -157,7 +157,7 @@ function StatusPill({ state, pulse }: { state: StationState; pulse?: boolean }) 
   const { t } = useI18n();
   const th = THEME[state];
   return (
-    <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-current/20 bg-black/30 px-2 py-0.5 text-[11px] font-semibold', th.text)}>
+    <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-current/20 bg-black/30 px-2 py-0.5 text-xs font-semibold', th.text)}>
       <span className="relative flex h-2 w-2">
         {pulse && <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-60', th.dot)} />}
         <span className={cn('relative inline-flex h-2 w-2 rounded-full shadow-[0_0_8px_currentColor]', th.dot)} />
@@ -427,7 +427,7 @@ function StationCard({
             <Avatar name={s.user.name} />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-white">{s.user.name}</div>
-              <div className="truncate text-[11px] tabular-nums text-zinc-500">{s.user.phone}</div>
+              <div className="truncate text-xs tabular-nums text-zinc-500">{s.user.phone}</div>
             </div>
           </Link>
 
@@ -445,12 +445,12 @@ function StationCard({
           </div>
 
           <div className="mt-auto pt-3">
-            <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-500">{t('room.remaining')}</div>
+            <div className="text-[11px] font-medium uppercase tracking-widest text-zinc-500">{t('room.remaining')}</div>
             <div className={cn('font-mono text-[1.9rem] font-black leading-tight tabular-nums', countdownTone[live.level])}>
               {formatClock(live.remaining)}
             </div>
             <ProgressBar value={live.progress} className={th.bar} />
-            <div className="mt-2 flex items-center justify-between gap-2 text-[11px] tabular-nums text-zinc-400">
+            <div className="mt-2 flex items-center justify-between gap-2 text-xs tabular-nums text-zinc-400">
               <span>
                 {t('room.started')} {formatTime(s.startedAt, lang)}
               </span>
@@ -468,7 +468,7 @@ function StationCard({
               {t(state === 'free' ? 'room.freeHint' : 'room.offlineHint')}
             </div>
           </div>
-          <dl className="mt-auto space-y-0.5 border-t border-white/5 pt-2 text-[11px] text-zinc-500">
+          <dl className="mt-auto space-y-0.5 border-t border-white/5 pt-2 text-xs text-zinc-500">
             <div className="flex justify-between gap-2">
               <dt>{t('dash.lastSeen')}</dt>
               <dd className="truncate text-zinc-400">{pc.lastSeenAt ? relativeTime(pc.lastSeenAt, lang, now) : t('common.never')}</dd>
@@ -530,7 +530,7 @@ function StationTable({ rows, now, actions }: { rows: { pc: PcDto; live: LiveSes
                 <Td>
                   {s ? (
                     <Link href={`/admin/users/${s.user.id}`} className="flex items-center gap-2 hover:text-violet-200">
-                      <Avatar name={s.user.name} className="h-7 w-7 text-[10px]" />
+                      <Avatar name={s.user.name} className="h-7 w-7 text-[11px]" />
                       <div className="min-w-0">
                         <div className="truncate font-medium text-white">{s.user.name}</div>
                         <div className="truncate text-xs text-zinc-500">{s.game ? `🎮 ${s.game}` : t('room.noGame')}</div>
@@ -587,7 +587,7 @@ function SummaryTile({ label, value, tone, href }: { label: string; value: numbe
   const body = (
     <div className={cn('relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 transition hover:border-zinc-700', href && 'cursor-pointer')}>
       <div className={cn('absolute inset-y-0 left-0 w-1', c.accent)} />
-      <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">{label}</div>
+      <div className="text-xs font-medium uppercase tracking-wide text-zinc-400">{label}</div>
       <div className={cn('mt-0.5 font-mono text-3xl font-black tabular-nums', c.text)}>{value}</div>
     </div>
   );
@@ -681,7 +681,7 @@ export function PcRoom({ showSummary = false, allowTableView = false }: { showSu
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="hidden text-[11px] text-zinc-500 sm:inline">
+          <span className="hidden text-xs text-zinc-500 sm:inline">
             {t('room.updates', { s: REFRESH_MS / 1000 })}
             {sync && (
               <>
@@ -733,7 +733,7 @@ export function PcRoom({ showSummary = false, allowTableView = false }: { showSu
         </div>
       )}
 
-      <p className="text-center text-[11px] text-zinc-600">{t('room.syncNote', { s: data.heartbeatIntervalSeconds })}</p>
+      <p className="text-center text-xs text-zinc-600">{t('room.syncNote', { s: data.heartbeatIntervalSeconds })}</p>
       {modals}
     </div>
   );
