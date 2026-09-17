@@ -25,3 +25,10 @@ export function formatDuration(totalSeconds: number, lang: 'ka' | 'en' = 'ka'): 
 
 /** 5400 → "1.5" */
 export const formatHours = (seconds: number) => secondsToHours(seconds).toString();
+
+/** Price list: 1 hour = 10 GEL — only used to show what a time balance is worth. */
+export const GEL_PER_HOUR = 10;
+export const secondsToGel = (seconds: number) => Math.round((seconds / 3600) * GEL_PER_HOUR * 100) / 100;
+
+/** 3028 → "8.41 ₾" */
+export const formatGel = (seconds: number) => `${secondsToGel(seconds).toFixed(2)} ₾`;

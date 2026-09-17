@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDuration, secondsToHours, type Paginated, type UserDto } from '@grm/shared';
+import { formatDuration, formatGel, secondsToHours, type Paginated, type UserDto } from '@grm/shared';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -91,7 +91,9 @@ export default function UsersPage() {
                   <Td className="tabular-nums text-zinc-400">{u.phone ?? '—'}</Td>
                   <Td className="text-right">
                     <div className="font-semibold tabular-nums text-white">{formatDuration(u.balanceSeconds, lang)}</div>
-                    <div className="text-xs tabular-nums text-zinc-500">{secondsToHours(u.balanceSeconds)} {lang === 'ka' ? 'სთ' : 'h'}</div>
+                    <div className="text-xs tabular-nums text-zinc-500">
+                      {secondsToHours(u.balanceSeconds)} {lang === 'ka' ? 'სთ' : 'h'} · {formatGel(u.balanceSeconds)}
+                    </div>
                   </Td>
                   <Td className="tabular-nums text-zinc-400">{formatDate(u.createdAt, lang)}</Td>
                   <Td>
