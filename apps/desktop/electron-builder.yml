@@ -1,0 +1,41 @@
+appId: ge.gameroom.client
+productName: Game Room Client
+directories:
+  buildResources: build
+  output: release
+files:
+  - out/**/*
+  - package.json
+# electron is hoisted to the workspace root, so electron-builder can't read the installed version — keep in sync with node_modules/electron
+electronVersion: 44.3.0
+asar: true
+# @grm/shared is bundled by electron-vite; no runtime node_modules are needed.
+npmRebuild: false
+
+# Target platform: Windows 10/11 x64 game room PCs.
+# The app itself runs as a kiosk (fullscreen, covers the taskbar) whenever it is packaged — see src/main/index.ts.
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  executableName: GameRoomClient
+  artifactName: GameRoomClient-Setup-${version}.${ext}
+  # launching games / taskkill run as the logged-in Windows user — no elevation at runtime
+  requestedExecutionLevel: asInvoker
+nsis:
+  oneClick: false
+  perMachine: true
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Game Room Client
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+
+mac:
+  target: [dmg]
+  category: public.app-category.utilities
+linux:
+  target: [AppImage]
+  category: Utility

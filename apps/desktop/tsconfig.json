@@ -1,0 +1,8 @@
+{
+  "//": "Editor config only. Type checking runs per process: tsconfig.node.json (main/preload) and tsconfig.web.json (renderer).",
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "types": ["node", "electron-vite/node"]
+  },
+  "include": ["electron.vite.config.ts", "src/**/*"]
+}

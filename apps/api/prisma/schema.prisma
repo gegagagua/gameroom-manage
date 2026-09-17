@@ -1,0 +1,205 @@
+// Game Room Manage — database schema
+// All durations/balances are stored as INTEGER SECONDS. The UI shows hours.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TransactionType {
+  TOPUP // admin added time
+  DEDUCTION // admin removed time
+  SESSION_CHARGE // time consumed by a PC session (one row per session, updated live)
+}
+
+enum SessionStatus {
+  ACTIVE
+  ENDED
+}
+
+enum SessionEndReason {
+  LOGOUT // user pressed logout
+  BALANCE_DEPLETED // balance reached 0
+  TIMEOUT // PC stopped sending heartbeats
+  ADMIN_FORCED // admin issued LOGOUT/SHUTDOWN from web
+  REPLACED // a new login happened on the same PC while an old session was still open
+}
+
+enum AlertType {
+  LOW_BALANCE
+  BALANCE_DEPLETED
+}
+
+enum PcCommand {
+  LOGOUT
+  SHUTDOWN
+}
+
+model Admin {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  transactions BalanceTransaction[]
+  acknowledged Alert[]
+
+  @@map("admins")
+}
+
+model User {
+  id             Int       @id @default(autoincrement())
+  name           String
+  email          String    @unique
+  phone          String    @unique
+  passwordHash   String    @map("password_hash")
+  balanceSeconds Int       @default(0) @map("balance_seconds")
+  isActive       Boolean   @default(true) @map("is_active")
+  // bumped on password change/reset → invalidates previously issued JWTs
+  tokenVersion   Int       @default(0) @map("token_version")
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  sessions     Session[]
+  transactions BalanceTransaction[]
+  alerts       Alert[]
+  resetTokens  PasswordResetToken[]
+
+  @@map("users")
+}
+
+model Pc {
+  id              Int        @id @default(autoincrement())
+  number          Int        @unique
+  name            String
+  lastSeenAt      DateTime?  @map("last_seen_at")
+  appVersion      String?    @map("app_version")
+  ipAddress       String?    @map("ip_address")
+  /// Name of the game the logged-in customer launched (reported by the desktop heartbeat)
+  currentGame     String?    @map("current_game")
+  pendingCommand  PcCommand? @map("pending_command")
+  commandIssuedAt DateTime?  @map("command_issued_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  sessions Session[]
+  alerts   Alert[]
+
+  @@map("pcs")
+}
+
+model Session {
+  id                Int               @id @default(autoincrement())
+  userId            Int               @map("user_id")
+  pcId              Int               @map("pc_id")
+  status            SessionStatus     @default(ACTIVE)
+  startedAt         DateTime          @default(now()) @map("started_at")
+  // billing cursor: time up to which the session has already been charged
+  lastBilledAt      DateTime          @map("last_billed_at")
+  lastHeartbeatAt   DateTime          @map("last_heartbeat_at")
+  endedAt           DateTime?         @map("ended_at")
+  endReason         SessionEndReason? @map("end_reason")
+  consumedSeconds   Int               @default(0) @map("consumed_seconds")
+  lowBalanceAlerted Boolean           @default(false) @map("low_balance_alerted")
+
+  user        User                @relation(fields: [userId], references: [id])
+  pc          Pc                  @relation(fields: [pcId], references: [id])
+  transaction BalanceTransaction?
+  alerts      Alert[]
+
+  @@index([status])
+  @@index([userId, status])
+  @@index([pcId, status])
+  @@index([startedAt])
+  @@map("sessions")
+}
+
+model BalanceTransaction {
+  id                  Int             @id @default(autoincrement())
+  userId              Int             @map("user_id")
+  type                TransactionType
+  // signed: positive = time added, negative = time removed/consumed
+  amountSeconds       Int             @map("amount_seconds")
+  balanceAfterSeconds Int             @map("balance_after_seconds")
+  note                String?
+  adminId             Int?            @map("admin_id")
+  sessionId           Int?            @unique @map("session_id")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  user    User     @relation(fields: [userId], references: [id])
+  admin   Admin?   @relation(fields: [adminId], references: [id])
+  session Session? @relation(fields: [sessionId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("balance_transactions")
+}
+
+model Alert {
+  id               Int       @id @default(autoincrement())
+  type             AlertType
+  userId           Int       @map("user_id")
+  pcId             Int?      @map("pc_id")
+  sessionId        Int?      @map("session_id")
+  message          String
+  createdAt        DateTime  @default(now()) @map("created_at")
+  acknowledgedAt   DateTime? @map("acknowledged_at")
+  acknowledgedById Int?      @map("acknowledged_by_id")
+
+  user           User     @relation(fields: [userId], references: [id])
+  pc             Pc?      @relation(fields: [pcId], references: [id])
+  session        Session? @relation(fields: [sessionId], references: [id])
+  acknowledgedBy Admin?   @relation(fields: [acknowledgedById], references: [id])
+
+  @@index([acknowledgedAt])
+  @@index([createdAt])
+  @@map("alerts")
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+enum GameLaunchType {
+  STEAM // steam://rungameid/<steamAppId>
+  EXE // exePath + args (e.g. Riot Client for League of Legends)
+  URL // any URL/protocol handler
+}
+
+/// Game catalog shown on the desktop client after login (managed by admin).
+model Game {
+  id           Int            @id @default(autoincrement())
+  name         String
+  launchType   GameLaunchType @map("launch_type")
+  steamAppId   Int?           @map("steam_app_id")
+  exePath      String?        @map("exe_path")
+  args         String?
+  url          String?
+  /// Windows process image names killed when the session ends (e.g. cs2.exe)
+  processNames String[]       @default([]) @map("process_names")
+  imageUrl     String?        @map("image_url")
+  isActive     Boolean        @default(true) @map("is_active")
+  sortOrder    Int            @default(0) @map("sort_order")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  @@index([isActive, sortOrder])
+  @@map("games")
+}

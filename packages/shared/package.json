@@ -1,0 +1,11 @@
+{
+  "name": "@grm/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared TS types, error codes, time formatting and i18n strings (consumed as TS source by web & desktop)",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

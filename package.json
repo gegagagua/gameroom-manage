@@ -1,0 +1,38 @@
+{
+  "name": "game-room-manage",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Game room / internet cafe management: NestJS API, Next.js admin & user web, Electron kiosk client",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,green \"npm run dev -w @grm/api\" \"npm run dev -w @grm/web\"",
+    "dev:api": "npm run dev -w @grm/api",
+    "dev:web": "npm run dev -w @grm/web",
+    "dev:desktop": "npm run dev -w @grm/desktop",
+    "db:migrate": "npm run prisma:migrate -w @grm/api",
+    "db:deploy": "npm run prisma:deploy -w @grm/api",
+    "build": "npm run build -w @grm/api && npm run build -w @grm/web && npm run build -w @grm/desktop",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test -w @grm/api",
+    "db:seed-demo": "npm run db:seed-demo -w @grm/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4"
+  },
+  "allowScripts": {
+    "@parcel/watcher@2.6.0": true,
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "electron@44.3.0": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "prisma@6.19.3": true,
+    "unrs-resolver@1.12.2": true
+  }
+}

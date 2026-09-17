@@ -1,0 +1,14 @@
+node_modules/
+dist/
+out/
+.next/
+release/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+!.env.example
+.DS_Store
+npm-debug.log*
+.claude/settings.local.json
