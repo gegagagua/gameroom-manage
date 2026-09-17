@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
+import { BalancePanel } from '@/components/balance-panel';
 import { useToast } from '@/components/toast';
 import { UserFormModal } from '@/components/user-form-modal';
-import { Badge, Button, Card, ConfirmModal, Empty, Input, Loading, PageHeader, Pagination, Select, Table, Td, Th } from '@/components/ui';
+import { Badge, Button, Card, ConfirmModal, Empty, Input, Loading, Modal, PageHeader, Pagination, Select, Table, Td, Th } from '@/components/ui';
 import { api, withQuery } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useI18n } from '@/lib/i18n';
@@ -26,6 +27,7 @@ export default function UsersPage() {
   const [editing, setEditing] = useState<UserDto | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<UserDto | null>(null);
+  const [adjusting, setAdjusting] = useState<UserDto | null>(null);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -74,7 +76,6 @@ export default function UsersPage() {
                 <Th>{t('common.phone')}</Th>
                 <Th className="text-right">{t('common.balance')}</Th>
                 <Th>{t('user.createdAt')}</Th>
-                <Th>{t('common.status')}</Th>
                 <Th className="text-right">{t('common.actions')}</Th>
               </tr>
             </thead>
@@ -82,9 +83,13 @@ export default function UsersPage() {
               {data.items.map((u) => (
                 <tr key={u.id} className="cursor-pointer hover:bg-zinc-800/40" onClick={() => router.push(`/admin/users/${u.id}`)}>
                   <Td>
-                    <Link href={`/admin/users/${u.id}`} className="font-medium text-white hover:text-violet-200" onClick={(e) => e.stopPropagation()}>
-                      {u.username ?? u.name}
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link href={`/admin/users/${u.id}`} className="font-medium text-white hover:text-violet-200" onClick={(e) => e.stopPropagation()}>
+                        {u.username ?? u.name}
+                      </Link>
+                      {u.activeSession && <Badge tone="violet">🎮 {u.activeSession.pc.name}</Badge>}
+                      {!u.isActive && <Badge tone="gray">{t('common.inactive')}</Badge>}
+                    </div>
                   </Td>
                   <Td className="text-zinc-400">{u.email}</Td>
                   <Td className="text-zinc-400">{u.name}</Td>
@@ -96,14 +101,11 @@ export default function UsersPage() {
                     </div>
                   </Td>
                   <Td className="tabular-nums text-zinc-400">{formatDate(u.createdAt, lang)}</Td>
-                  <Td>
-                    <div className="flex flex-wrap gap-1">
-                      <Badge tone={u.isActive ? 'green' : 'gray'}>{u.isActive ? t('common.active') : t('common.inactive')}</Badge>
-                      {u.activeSession && <Badge tone="violet">🎮 {u.activeSession.pc.name}</Badge>}
-                    </div>
-                  </Td>
                   <Td className="text-right">
                     <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" onClick={() => setAdjusting(u)}>
+                        {t('common.balanceEdit')}
+                      </Button>
                       <Button size="sm" variant="secondary" onClick={() => setEditing(u)}>
                         {t('common.edit')}
                       </Button>
@@ -132,6 +134,19 @@ export default function UsersPage() {
           void revalidate('/users');
         }}
       />
+
+      <Modal open={!!adjusting} onClose={() => setAdjusting(null)} title={`${t('balance.title')} — ${adjusting?.username ?? adjusting?.name ?? ''}`}>
+        {adjusting && (
+          <BalancePanel
+            user={adjusting}
+            asCard={false}
+            onDone={async () => {
+              setAdjusting(null);
+              await revalidate('/users');
+            }}
+          />
+        )}
+      </Modal>
 
       <ConfirmModal
         open={!!deleting}

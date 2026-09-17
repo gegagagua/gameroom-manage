@@ -11,8 +11,8 @@ import { Button, Card, FormError, Input, Segmented } from './ui';
 type Operation = 'add' | 'subtract' | 'set';
 const PRESETS = [0.5, 1, 2, 3, 5];
 
-/** Admin-only balance management (add / subtract / set exact hours). */
-export function BalancePanel({ user, onDone }: { user: UserDto; onDone: () => void }) {
+/** Admin-only balance management (add / subtract / set exact hours). `asCard=false` → bare form for a modal. */
+export function BalancePanel({ user, onDone, asCard = true }: { user: UserDto; onDone: () => void; asCard?: boolean }) {
   const { t, lang, errText } = useI18n();
   const toast = useToast();
   const [operation, setOperation] = useState<Operation>('add');
@@ -47,63 +47,63 @@ export function BalancePanel({ user, onDone }: { user: UserDto; onDone: () => vo
     }
   };
 
-  return (
-    <Card title={t('balance.title')}>
-      <form onSubmit={submit} className="space-y-4">
-        <div className="flex items-baseline justify-between">
-          <span className="text-xs uppercase tracking-wide text-zinc-400">{t('balance.current')}</span>
-          <span className="text-2xl font-bold tabular-nums text-white">{formatDuration(user.balanceSeconds, lang)}</span>
-        </div>
+  const form = (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs uppercase tracking-wide text-zinc-400">{t('balance.current')}</span>
+        <span className="text-2xl font-bold tabular-nums text-white">{formatDuration(user.balanceSeconds, lang)}</span>
+      </div>
 
-        <Segmented<Operation>
-          value={operation}
-          onChange={setOperation}
-          options={[
-            { value: 'add', label: t('balance.add') },
-            { value: 'subtract', label: t('balance.subtract') },
-            { value: 'set', label: t('balance.set') },
-          ]}
-        />
+      <Segmented<Operation>
+        value={operation}
+        onChange={setOperation}
+        options={[
+          { value: 'add', label: t('balance.add') },
+          { value: 'subtract', label: t('balance.subtract') },
+          { value: 'set', label: t('balance.set') },
+        ]}
+      />
 
-        <div className="flex flex-wrap gap-2">
-          {PRESETS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setHours(String(p))}
-              className={cn(
-                'rounded-lg border px-3 py-1.5 text-sm tabular-nums transition',
-                parsed === p ? 'border-violet-500 bg-violet-600/20 text-violet-100' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800',
-              )}
-            >
-              {p} {lang === 'ka' ? 'სთ' : 'h'}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-wrap gap-2">
+        {PRESETS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => setHours(String(p))}
+            className={cn(
+              'rounded-lg border px-3 py-1.5 text-sm tabular-nums transition',
+              parsed === p ? 'border-violet-500 bg-violet-600/20 text-violet-100' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800',
+            )}
+          >
+            {p} {lang === 'ka' ? 'სთ' : 'h'}
+          </button>
+        ))}
+      </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Input label={t('balance.hours')} inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} required />
-          <Input label={t('common.note')} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('balance.notePlaceholder')} maxLength={500} />
-        </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input label={t('balance.hours')} inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} required />
+        <Input label={t('common.note')} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('balance.notePlaceholder')} maxLength={500} />
+      </div>
 
-        <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm">
-          <span className="text-zinc-400">{t('balance.preview')}</span>
-          <span className={cn('font-bold tabular-nums', preview !== null && preview < 0 ? 'text-red-400' : 'text-emerald-300')}>
-            {preview === null ? '—' : formatDuration(preview, lang)}
-          </span>
-        </div>
+      <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm">
+        <span className="text-zinc-400">{t('balance.preview')}</span>
+        <span className={cn('font-bold tabular-nums', preview !== null && preview < 0 ? 'text-red-400' : 'text-emerald-300')}>
+          {preview === null ? '—' : formatDuration(preview, lang)}
+        </span>
+      </div>
 
-        <FormError message={error} />
-        <Button
-          type="submit"
-          loading={busy}
-          disabled={!valid}
-          variant={operation === 'subtract' ? 'warning' : 'primary'}
-          className="w-full"
-        >
-          {t('balance.apply')}
-        </Button>
-      </form>
-    </Card>
+      <FormError message={error} />
+      <Button
+        type="submit"
+        loading={busy}
+        disabled={!valid}
+        variant={operation === 'subtract' ? 'warning' : 'primary'}
+        className="w-full"
+      >
+        {t('balance.apply')}
+      </Button>
+    </form>
   );
+
+  return asCard ? <Card title={t('balance.title')}>{form}</Card> : form;
 }
