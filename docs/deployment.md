@@ -1,5 +1,13 @@
 # Deployment (Production)
 
+## Production: https://digitalfix.cloud/mirage-manage
+
+Shared VPS (`digitalfix`), `/var/www/digitalfix/projects/mirage-manage` (git clone). pm2: `mirage-manage-web` (127.0.0.1:3104, basePath `/mirage-manage`), `mirage-manage-api` (127.0.0.1:4104), PostgreSQL DB `mirage_manage`. nginx: `/etc/nginx/digitalfix/projects/mirage-manage.conf` (ასლ: `deploy/digitalfix/`). `/mirage-manage/api/*` → API.
+
+განახლებ: `ssh digitalfix@92.205.184.159` → `cd /var/www/digitalfix/projects/mirage-manage && deploy/digitalfix/update.sh`.
+
+Desktop exe: tag `desktop-vX.Y.Z` push → GitHub Actions → Release-ში `GameRoomClient-Setup-X.Y.Z.exe` (API URL `https://digitalfix.cloud/mirage-manage` ჩაშენებულ).
+
 ## 0. სწრაფ გზა — ერთ ბრძანებ (Ubuntu 22.04/24.04 VPS)
 
 ```bash

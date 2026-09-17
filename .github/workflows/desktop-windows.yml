@@ -1,11 +1,18 @@
 # Builds the Windows installer (NSIS x64) for the kiosk client.
-# Run manually from the Actions tab, or push a tag like desktop-v1.0.0.
+# Run manually from the Actions tab (artifact), or push a tag like desktop-v1.0.0 (artifact + GitHub Release with the .exe).
 name: Desktop Windows installer
 
 on:
   workflow_dispatch:
+    inputs:
+      api_url:
+        description: Server URL prefilled in the client's Settings
+        default: https://digitalfix.cloud/mirage-manage
   push:
     tags: ['desktop-v*']
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -31,6 +38,7 @@ jobs:
         run: npm run dist:win -w @grm/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          MAIN_VITE_DEFAULT_API_URL: ${{ inputs.api_url || 'https://digitalfix.cloud/mirage-manage' }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -39,3 +47,9 @@ jobs:
             apps/desktop/release/*.exe
             apps/desktop/release/*.blockmap
           if-no-files-found: error
+
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/desktop/release/*.exe
