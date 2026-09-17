@@ -427,7 +427,7 @@ function StationCard({
             <Avatar name={s.user.name} />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-white">{s.user.name}</div>
-              <div className="truncate text-xs tabular-nums text-zinc-500">{s.user.phone}</div>
+              <div className="truncate text-xs tabular-nums text-zinc-500">{s.user.phone ?? ''}</div>
             </div>
           </Link>
 

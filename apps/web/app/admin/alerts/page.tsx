@@ -94,7 +94,7 @@ export default function AlertsPage() {
                     <Link href={`/admin/users/${a.user.id}`} className="text-white hover:text-violet-200">
                       {a.user.name}
                     </Link>
-                    <div className="text-xs tabular-nums text-zinc-500">{a.user.phone}</div>
+                    <div className="text-xs tabular-nums text-zinc-500">{a.user.phone ?? ''}</div>
                   </Td>
                   <Td className="text-zinc-300">{a.pc?.name ?? '—'}</Td>
                   <Td className="text-xs text-zinc-400">

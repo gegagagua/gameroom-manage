@@ -56,8 +56,11 @@ model Admin {
 model User {
   id             Int       @id @default(autoincrement())
   name           String
+  /// Login name (kiosk/web). Optional — app-created users may only have email/phone.
+  username       String?   @unique
   email          String    @unique
-  phone          String    @unique
+  /// Optional: legacy imports and walk-in customers may have no phone.
+  phone          String?   @unique
   passwordHash   String    @map("password_hash")
   balanceSeconds Int       @default(0) @map("balance_seconds")
   isActive       Boolean   @default(true) @map("is_active")

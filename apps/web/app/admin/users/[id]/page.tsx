@@ -45,7 +45,9 @@ export default function UserDetailPage() {
             {user.activeSession && <Badge tone="violet">🎮 {user.activeSession.pc.name}</Badge>}
           </span>
         }
-        subtitle={`${user.email} · ${user.phone} · ${t('user.createdAt')}: ${formatDateTime(user.createdAt, lang)}`}
+        subtitle={[user.username, user.email, user.phone, `${t('user.createdAt')}: ${formatDateTime(user.createdAt, lang)}`]
+          .filter(Boolean)
+          .join(' · ')}
         actions={
           <Button variant="secondary" onClick={() => setEditing(true)}>
             {t('common.edit')}

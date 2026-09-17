@@ -6,6 +6,7 @@ export function toUserDto(u: User, activeSession?: ActiveSessionRef | null) {
   return {
     id: u.id,
     name: u.name,
+    username: u.username,
     email: u.email,
     phone: u.phone,
     balanceSeconds: u.balanceSeconds,

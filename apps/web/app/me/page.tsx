@@ -63,7 +63,7 @@ export default function MePage() {
 
   return (
     <>
-      <PageHeader title={t('me.title')} subtitle={`${me.email} · ${me.phone}`} />
+      <PageHeader title={t('me.title')} subtitle={[me.email, me.phone].filter(Boolean).join(' · ')} />
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <section

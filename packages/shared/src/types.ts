@@ -23,8 +23,10 @@ export interface PcRef {
 export interface UserDto {
   id: number;
   name: string;
+  /** Login name — imported/legacy customers have one; app-created users may not. */
+  username: string | null;
   email: string;
-  phone: string;
+  phone: string | null;
   balanceSeconds: number;
   isActive: boolean;
   createdAt: string;
@@ -74,7 +76,7 @@ export interface AlertDto {
   acknowledgedAt: string | null;
   acknowledgedBy: { id: number; name: string } | null;
   sessionId: number | null;
-  user: { id: number; name: string; phone: string };
+  user: { id: number; name: string; phone: string | null };
   pc: PcRef | null;
 }
 
@@ -99,7 +101,7 @@ export interface PcDto {
     startedAt: string;
     lastHeartbeatAt: string;
     consumedSeconds: number;
-    user: { id: number; name: string; phone: string; balanceSeconds: number };
+    user: { id: number; name: string; phone: string | null; balanceSeconds: number };
   } | null;
 }
 

@@ -31,7 +31,7 @@ Roles: `admin` — ყველ `/users`, `/pcs`, `/alerts`, `/reports`; `user` 
 | Method | Path | Auth | Body | Response |
 |---|---|---|---|---|
 | POST | `/auth/admin/login` | public | `{ email, password }` | `{ principal, accessToken }` + cookie |
-| POST | `/auth/login` | public | `{ login, password }` (login = email ან ტელ.) | `{ principal, accessToken }` + cookie |
+| POST | `/auth/login` | public | `{ login, password }` (login = email, ტელ. ან username) | `{ principal, accessToken }` + cookie |
 | POST | `/auth/logout` | public | — | `{ ok }`, cookie წაიშლ |
 | GET | `/auth/me` | any | — | `{ role:'admin', admin }` ან `{ role:'user', user: UserDto }` |
 | POST | `/auth/forgot-password` | public | `{ email }` | `{ ok }` (ყოველთვ, email enumeration-ის წინააღმდეგ) |
@@ -42,19 +42,21 @@ Rate limits: login 20/წთ, forgot 5/წთ (IP-ზ).
 
 ## Users — `/users` (admin)
 
+`username` და `phone` არასავალდებულო და უნიკალურ (`USERNAME_TAKEN` / `PHONE_TAKEN`); `username`-ით შესვლ შესაძლებელ (case-insensitive). `search` ეძებ name/username/email/phone-ში. ძველ სოფტიდან იმპორტ → [migration.md](migration.md).
+
 | Method | Path | Body / Query | Response |
 |---|---|---|---|
 | GET | `/users` | `?search&status=all\|active\|inactive&page&pageSize` | `Paginated<UserDto>` |
-| POST | `/users` | `{ name, email, phone, password, balanceHours?, isActive? }` | `UserDto` (201) |
+| POST | `/users` | `{ name, email, password, username?, phone?, balanceHours?, isActive? }` | `UserDto` (201) |
 | GET | `/users/:id` | — | `UserDto & { stats }` |
-| PATCH | `/users/:id` | `{ name?, email?, phone?, password?, isActive? }` | `UserDetailDto` |
+| PATCH | `/users/:id` | `{ name?, email?, username?, phone?, password?, isActive? }` | `UserDetailDto` |
 | DELETE | `/users/:id` | — | `{ ok }` (soft delete; `USER_HAS_ACTIVE_SESSION` თუ PC-ზე შესულ) |
 | POST | `/users/:id/balance` | `{ operation: 'add'\|'subtract'\|'set', hours, note? }` | `{ user, transaction }` |
 | GET | `/users/:id/transactions` | page | `Paginated<TransactionDto>` |
 | GET | `/users/:id/sessions` | page | `Paginated<SessionDto>` |
 
 ```ts
-UserDto = { id, name, email, phone, balanceSeconds, isActive, createdAt, updatedAt,
+UserDto = { id, name, username: string|null, email, phone: string|null, balanceSeconds, isActive, createdAt, updatedAt,
             activeSession: { id, startedAt, lastHeartbeatAt, consumedSeconds, pc: {id, number, name} } | null }
 ```
 

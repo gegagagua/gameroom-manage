@@ -30,6 +30,7 @@ export class UsersService {
         ? {
             OR: [
               { name: { contains: q.search, mode: 'insensitive' } },
+              { username: { contains: q.search, mode: 'insensitive' } },
               { email: { contains: q.search, mode: 'insensitive' } },
               { phone: { contains: normalizePhone(q.search) || q.search } },
             ],
@@ -45,14 +46,15 @@ export class UsersService {
 
   async create(dto: CreateUserDto, adminId: number) {
     const email = normalizeEmail(dto.email);
-    const phone = normalizePhone(dto.phone);
-    await this.assertUnique(email, phone);
+    const phone = dto.phone ? normalizePhone(dto.phone) : null;
+    const username = dto.username ?? null;
+    await this.assertUnique({ email, phone, username });
     const balanceSeconds = hoursToSeconds(dto.balanceHours ?? 0);
     const passwordHash = await hashPassword(dto.password);
 
     const user = await this.prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
-        data: { name: dto.name, email, phone, passwordHash, balanceSeconds, isActive: dto.isActive ?? true },
+        data: { name: dto.name, username, email, phone, passwordHash, balanceSeconds, isActive: dto.isActive ?? true },
       });
       if (balanceSeconds > 0) {
         await tx.balanceTransaction.create({
@@ -82,11 +84,13 @@ export class UsersService {
     if (!existing) throw ApiError.notFound(ErrorCode.USER_NOT_FOUND, 'User not found');
 
     const email = dto.email !== undefined ? normalizeEmail(dto.email) : undefined;
-    const phone = dto.phone !== undefined ? normalizePhone(dto.phone) : undefined;
-    await this.assertUnique(email, phone, id);
+    const phone = dto.phone !== undefined ? (dto.phone ? normalizePhone(dto.phone) : null) : undefined;
+    const username = dto.username;
+    await this.assertUnique({ email, phone, username }, id);
 
     const data: Prisma.UserUpdateInput = {
       ...(dto.name !== undefined ? { name: dto.name } : {}),
+      ...(username !== undefined ? { username } : {}),
       ...(email !== undefined ? { email } : {}),
       ...(phone !== undefined ? { phone } : {}),
       ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
@@ -118,7 +122,8 @@ export class UsersService {
         deletedAt: this.clock.now(),
         isActive: false,
         email: `deleted:${id}:${user.email}`,
-        phone: `deleted:${id}:${user.phone}`,
+        phone: user.phone ? `deleted:${id}:${user.phone}` : null,
+        username: user.username ? `deleted:${id}:${user.username}`.slice(0, 64) : null,
         tokenVersion: { increment: 1 },
       },
     });
@@ -140,13 +145,20 @@ export class UsersService {
     };
   }
 
-  private async assertUnique(email?: string, phone?: string, excludeId?: number) {
+  private async assertUnique(
+    fields: { email?: string | null; phone?: string | null; username?: string | null },
+    excludeId?: number,
+  ) {
+    const { email, phone, username } = fields;
     const notSelf = excludeId ? { id: { not: excludeId } } : {};
     if (email && (await this.prisma.user.findFirst({ where: { email, ...notSelf } }))) {
       throw ApiError.conflict(ErrorCode.EMAIL_TAKEN, 'Email is already in use');
     }
     if (phone && (await this.prisma.user.findFirst({ where: { phone, ...notSelf } }))) {
       throw ApiError.conflict(ErrorCode.PHONE_TAKEN, 'Phone is already in use');
+    }
+    if (username && (await this.prisma.user.findFirst({ where: { username: { equals: username, mode: 'insensitive' }, ...notSelf } }))) {
+      throw ApiError.conflict(ErrorCode.USERNAME_TAKEN, 'Username is already in use');
     }
   }
 }

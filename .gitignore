@@ -12,3 +12,6 @@ coverage/
 .DS_Store
 npm-debug.log*
 .claude/settings.local.json
+
+# Legacy user export from the old panel (personal data) — never commit
+export.html

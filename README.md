@@ -59,5 +59,6 @@ npm run typecheck
 | [docs/web.md](docs/web.md) | ვებ-აპის გვერდებ |
 | [docs/desktop.md](docs/desktop.md) | Electron kiosk: settings, ქცევ, lockdown, build |
 | [docs/deployment.md](docs/deployment.md) | Production deploy |
+| [docs/migration.md](docs/migration.md) | ძველ სოფტიდან (SENET) იუზერების იმპორტ |
 
 AI ასისტენტისთვ: [CLAUDE.md](CLAUDE.md) და `.claude/skills/`.

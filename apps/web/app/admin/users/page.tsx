@@ -9,6 +9,7 @@ import { useToast } from '@/components/toast';
 import { UserFormModal } from '@/components/user-form-modal';
 import { Badge, Button, Card, ConfirmModal, Empty, Input, Loading, PageHeader, Pagination, Select, Table, Td, Th } from '@/components/ui';
 import { api, withQuery } from '@/lib/api';
+import { formatDate } from '@/lib/format';
 import { useI18n } from '@/lib/i18n';
 import { revalidate } from '@/lib/swr';
 
@@ -64,13 +65,15 @@ export default function UsersPage() {
         ) : data.items.length === 0 ? (
           <Empty />
         ) : (
-          <Table>
+          <Table minWidth={1040}>
             <thead>
               <tr>
-                <Th>{t('common.name')}</Th>
+                <Th>{t('common.username')}</Th>
                 <Th>{t('common.email')}</Th>
+                <Th>{t('common.name')}</Th>
                 <Th>{t('common.phone')}</Th>
                 <Th className="text-right">{t('common.balance')}</Th>
+                <Th>{t('user.createdAt')}</Th>
                 <Th>{t('common.status')}</Th>
                 <Th className="text-right">{t('common.actions')}</Th>
               </tr>
@@ -80,15 +83,17 @@ export default function UsersPage() {
                 <tr key={u.id} className="cursor-pointer hover:bg-zinc-800/40" onClick={() => router.push(`/admin/users/${u.id}`)}>
                   <Td>
                     <Link href={`/admin/users/${u.id}`} className="font-medium text-white hover:text-violet-200" onClick={(e) => e.stopPropagation()}>
-                      {u.name}
+                      {u.username ?? u.name}
                     </Link>
                   </Td>
                   <Td className="text-zinc-400">{u.email}</Td>
-                  <Td className="tabular-nums text-zinc-400">{u.phone}</Td>
+                  <Td className="text-zinc-400">{u.name}</Td>
+                  <Td className="tabular-nums text-zinc-400">{u.phone ?? '—'}</Td>
                   <Td className="text-right">
                     <div className="font-semibold tabular-nums text-white">{formatDuration(u.balanceSeconds, lang)}</div>
                     <div className="text-xs tabular-nums text-zinc-500">{secondsToHours(u.balanceSeconds)} {lang === 'ka' ? 'სთ' : 'h'}</div>
                   </Td>
+                  <Td className="tabular-nums text-zinc-400">{formatDate(u.createdAt, lang)}</Td>
                   <Td>
                     <div className="flex flex-wrap gap-1">
                       <Badge tone={u.isActive ? 'green' : 'gray'}>{u.isActive ? t('common.active') : t('common.inactive')}</Badge>

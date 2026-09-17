@@ -15,6 +15,12 @@ export function formatDateTime(iso: string | null | undefined, lang: Lang): stri
   }).format(new Date(iso));
 }
 
+/** Date only, no clock — e.g. registration date in lists. */
+export function formatDate(iso: string | null | undefined, lang: Lang): string {
+  if (!iso) return '—';
+  return new Intl.DateTimeFormat(locale(lang), { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+}
+
 export function formatTime(iso: string | null | undefined, lang: Lang): string {
   if (!iso) return '—';
   return new Intl.DateTimeFormat(locale(lang), { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));

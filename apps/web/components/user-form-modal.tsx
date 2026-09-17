@@ -22,6 +22,7 @@ export function UserFormModal({
   const { t, errText } = useI18n();
   const isEdit = !!user;
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -33,6 +34,7 @@ export function UserFormModal({
   useEffect(() => {
     if (!open) return;
     setName(user?.name ?? '');
+    setUsername(user?.username ?? '');
     setEmail(user?.email ?? '');
     setPhone(user?.phone ?? '');
     setPassword('');
@@ -53,11 +55,19 @@ export function UserFormModal({
       const saved = isEdit
         ? await api<UserDto>(`/users/${user.id}`, {
             method: 'PATCH',
-            body: { name, email, phone, isActive, ...(password ? { password } : {}) },
+            body: { name, username: username.trim() || null, email, phone: phone.trim() || null, isActive, ...(password ? { password } : {}) },
           })
         : await api<UserDto>('/users', {
             method: 'POST',
-            body: { name, email, phone, password, isActive, ...(hours > 0 ? { balanceHours: hours } : {}) },
+            body: {
+              name,
+              username: username.trim() || null,
+              email,
+              phone: phone.trim() || null,
+              password,
+              isActive,
+              ...(hours > 0 ? { balanceHours: hours } : {}),
+            },
           });
       onSaved(saved);
       onClose();
@@ -88,8 +98,15 @@ export function UserFormModal({
         <div className="sm:col-span-2">
           <Input label={t('common.name')} value={name} onChange={(e) => setName(e.target.value)} required maxLength={100} autoFocus />
         </div>
+        <Input
+          label={t('common.username')}
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          maxLength={32}
+          hint={t('users.usernameHint')}
+        />
         <Input label={t('common.email')} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <Input label={t('common.phone')} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+995 5XX XX XX XX" required />
+        <Input label={t('users.phoneOptional')} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+995 5XX XX XX XX" />
         <Input
           label={isEdit ? t('users.newPassword') : t('common.password')}
           type="password"

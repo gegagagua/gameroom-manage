@@ -11,7 +11,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "test": "jest --runInBand --config test/jest-e2e.json",
-    "db:seed-demo": "node --env-file=.env -r ts-node/register/transpile-only prisma/seed-demo.ts"
+    "db:seed-demo": "node --env-file=.env -r ts-node/register/transpile-only prisma/seed-demo.ts",
+    "db:import-legacy": "node --env-file=.env -r ts-node/register/transpile-only prisma/import-legacy.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.4",

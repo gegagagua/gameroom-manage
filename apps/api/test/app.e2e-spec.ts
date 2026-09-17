@@ -58,7 +58,7 @@ describe('Game Room API (e2e)', () => {
       .post('/api/users')
       .send({ name: `User ${n}`, email: `u${n}@test.local`, phone: `+9955${n}`, password: 'secret1', balanceHours: 1, ...overrides })
       .expect(201);
-    return res.body as { id: number; email: string; phone: string; balanceSeconds: number };
+    return res.body as { id: number; email: string; phone: string; username: string | null; balanceSeconds: number };
   };
 
   const balanceOf = async (userId: number) =>
@@ -130,6 +130,30 @@ describe('Game Room API (e2e)', () => {
       const bad = await admin.post('/api/users').send({ name: '', email: 'x', phone: 'abc', password: '1' });
       expect(bad.status).toBe(400);
       expect(bad.body.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('imports-style user: optional phone, username login, username uniqueness', async () => {
+      const n = Math.floor(Math.random() * 1e9);
+      const u = await createUser({ username: `legacy${n}`, phone: null });
+      expect(u.phone).toBeNull();
+      expect(u.username).toBe(`legacy${n}`);
+
+      // customers signing in with their (old) username, case-insensitively
+      const customer = request.agent(app.getHttpServer());
+      await customer.post('/api/auth/login').send({ login: `LEGACY${n}`, password: 'secret1' }).expect(200);
+
+      const dupUsername = await admin
+        .post('/api/users')
+        .send({ name: 'X', username: u.username, email: `other${n}@test.local`, password: 'secret1' });
+      expect(dupUsername.status).toBe(409);
+      expect(dupUsername.body.code).toBe('USERNAME_TAKEN');
+
+      // the username is freed by a soft delete
+      await admin.delete(`/api/users/${u.id}`).expect(200);
+      await admin
+        .post('/api/users')
+        .send({ name: 'X', username: u.username, email: `other${n}@test.local`, password: 'secret1' })
+        .expect(201);
     });
 
     it('lists, searches, updates and soft-deletes', async () => {
