@@ -31,6 +31,9 @@ interface RequestOptions {
   body?: unknown;
 }
 
+/** Next.js basePath (empty unless deployed under a sub-path); plain fetch() does not add it. */
+export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 /**
  * Calls the API through the same-origin `/api` proxy. `path` is relative to `/api` (e.g. `/users?page=1`).
  * Throws ApiRequestError with the API's machine-readable `code` (or NETWORK when offline).
@@ -38,7 +41,7 @@ interface RequestOptions {
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`/api${path}`, {
+    res = await fetch(`${BASE_PATH}/api${path}`, {
       method: opts.method ?? 'GET',
       headers: opts.body !== undefined ? { 'content-type': 'application/json' } : undefined,
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,

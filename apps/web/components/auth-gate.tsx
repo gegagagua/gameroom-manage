@@ -4,7 +4,7 @@ import type { MeResponse } from '@grm/shared';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import useSWR from 'swr';
-import { ApiRequestError } from '@/lib/api';
+import { ApiRequestError, BASE_PATH } from '@/lib/api';
 
 /**
  * Client-side role gate. Redirects to /login on 401 and to the other role's home on role mismatch.
@@ -16,7 +16,9 @@ export function useRequireRole(role: 'admin' | 'user') {
 
   useEffect(() => {
     if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
-      router.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+      // router paths exclude the basePath; window.location includes it
+      const path = window.location.pathname.slice(BASE_PATH.length) || '/';
+      router.replace(`/login?next=${encodeURIComponent(path)}`);
     } else if (data && data.role !== role) {
       router.replace(data.role === 'admin' ? '/admin' : '/me');
     }
