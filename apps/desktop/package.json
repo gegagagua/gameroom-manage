@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "devDependencies": {
+    "@fontsource-variable/noto-sans-georgian": "^5.3.0",
     "@grm/shared": "*",
     "@types/node": "^24.13.4",
     "@types/react": "^19.3.0",

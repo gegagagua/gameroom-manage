@@ -14,9 +14,10 @@ export class StaleSessionsTask {
     if (this.running) return;
     this.running = true;
     try {
+      await this.billing.billWebSessions(); // web-started sessions have no heartbeats
       await this.billing.closeStaleSessions();
     } catch (err) {
-      this.logger.error(`Stale session sweep failed: ${(err as Error).message}`);
+      this.logger.error(`Session sweep failed: ${(err as Error).message}`);
     } finally {
       this.running = false;
     }

@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -19,6 +19,11 @@ export class HeartbeatDto {
   @IsString()
   @MaxLength(100)
   currentGame?: string;
+
+  /** Idle kiosk that can take over a session the admin started from the web for this PC. */
+  @IsOptional()
+  @IsBoolean()
+  acceptSession?: boolean;
 }
 
 export class DesktopLoginDto extends HeartbeatDto {

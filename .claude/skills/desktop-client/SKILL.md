@@ -73,7 +73,9 @@ GRM_WINDOWED=1 GRM_API_URL=http://localhost:4000 GRM_PC_NUMBER=2 GRM_PC_KEY=dev-
 # without GRM_WINDOWED the dev build opens as a full-screen kiosk — quit via Settings, or pkill -f Electron.app from a terminal
 ```
 
-Logs to grep: `[games] DRY-RUN launch|kill`, `[window] mode=… bounds=…`, `[dev] auto-launch`.
+Logs to grep: `[heartbeat] ok|failed|loop stalled`, `[games] DRY-RUN launch|kill`, `[window] mode=… bounds=…`, `[dev] auto-launch`. Every build also writes them to `<userData>/logs/client.log` (Windows: `%APPDATA%\Game Room Client\logs\client.log`, 5 MB + one `client.old.log`).
+
+Heartbeat watchdog: a local 15 s tick (no network) restarts a stalled heartbeat loop, flips `online` to false after interval+30 s without a successful heartbeat, and locks an active session after 180 s. Each heartbeat also has a hard 25 s timeout on top of the 10 s HTTP timeout.
 
 Verify from the API side: admin login → `GET /api/pcs` → PC online, `currentSession.user`, `currentGame` (appears after the next regular heartbeat). Admin command: `POST /api/pcs/:id/command {"command":"LOGOUT"}` → delivered on the next heartbeat (`pendingCommand` becomes null).
 

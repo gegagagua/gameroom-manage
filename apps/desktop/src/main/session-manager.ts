@@ -1,8 +1,9 @@
 import type { DesktopGame, DesktopHeartbeatResponse, DesktopSessionState, PcCommand } from '@grm/shared';
-import type { ActionResult, AppState, DesktopConfig, MessageKind, NoticeKind, SettingsPayload, WindowMode } from '../common/ipc';
+import type { ActionResult, AppState, DesktopConfig, MessageKind, NoticeKind, QuickApp, SettingsPayload, WindowMode } from '../common/ipc';
 import { ApiClient, ApiRequestError } from './api-client';
 import { ConfigStore, isConfigured, validateConfig } from './config-store';
-import { GameCatalogCache, killGames, launchGame } from './games';
+import { checkExitPassword } from './exit-password';
+import { DISCORD_PROCESS, GameCatalogCache, killGames, launchDiscord, launchGame } from './games';
 import { isShutdownDryRun, shutdownPc } from './power';
 
 /** Lock the session locally if the server has been unreachable this long. */
@@ -11,12 +12,20 @@ const OFFLINE_GRACE_MS = 180_000;
 const OFFLINE_SLACK_MS = 5_000;
 const MESSAGE_VISIBLE_MS = 15_000;
 const COMMAND_SHUTDOWN_DELAY_MS = 10_000;
-const WARNING_VISIBLE_MS = 12_000;
+const WARNING_VISIBLE_MS = 22_000;
 const NOTICE_VISIBLE_MS = 10_000;
 const SETTINGS_UNLOCK_MS = 5 * 60_000;
 /** setTimeout overflows above 2^31-1 ms; heartbeats re-arm the timer every minute anyway. */
 const MAX_TIMER_MS = 2_000_000_000;
+/** A heartbeat that hasn't settled after this long is abandoned (the HTTP timeout is 10 s). */
+const HEARTBEAT_HARD_TIMEOUT_MS = 25_000;
+/** Local watchdog tick — no network, it only checks that the heartbeat loop is still alive. */
+const WATCHDOG_TICK_MS = 15_000;
+/** How late a heartbeat may be before the watchdog restarts the loop / shows "offline". */
+const HEARTBEAT_LATE_MS = 30_000;
 const WARN_5_SECONDS = 300;
+/** launchingGameId while Discord starts (real game ids are positive). */
+const QUICK_APP_LAUNCH_ID = -1;
 const WARN_1_SECONDS = 60;
 /** On EXPIRED logout the server consumes a leftover ≤ 60 s; more than that means the balance was topped up. */
 const TOPPED_UP_THRESHOLD_SECONDS = 60;
@@ -49,6 +58,10 @@ export class SessionManager {
   private stopped = false;
 
   private heartbeatTimer?: NodeJS.Timeout;
+  private watchdogTimer?: NodeJS.Timeout;
+  private heartbeatInFlight = false;
+  /** epoch ms when the next heartbeat should start (null while one is in flight or the PC isn't configured) */
+  private nextHeartbeatAt: number | null = null;
   private expiryTimer?: NodeJS.Timeout;
   private warnTimers: NodeJS.Timeout[] = [];
   private phaseTimer?: NodeJS.Timeout;
@@ -81,6 +94,7 @@ export class SessionManager {
       session: null,
       balanceSeconds: 0,
       balanceSyncedAt: Date.now(),
+      paused: false,
       games: this.gameCache.load(),
       gamesStatus: 'idle',
       launchingGameId: null,
@@ -106,11 +120,19 @@ export class SessionManager {
       void this.killGames('startup without session');
     }
     this.scheduleHeartbeat(0);
+    this.watchdogTimer = setInterval(() => this.watchdog(), WATCHDOG_TICK_MS);
+  }
+
+  /** Windows woke up from sleep/hibernation: don't wait up to a minute for the next heartbeat. */
+  onSystemResume() {
+    console.log('[power] system resumed');
+    if (!this.heartbeatInFlight) this.scheduleHeartbeat(0);
   }
 
   stop() {
     this.stopped = true;
     clearTimeout(this.heartbeatTimer);
+    clearInterval(this.watchdogTimer);
     this.clearSessionTimers();
     clearTimeout(this.phaseTimer);
   }
@@ -128,18 +150,31 @@ export class SessionManager {
     if (this.state.message?.kind === 'COMMAND_SHUTDOWN') return { ok: false, code: 'BUSY' };
     try {
       const res = await this.api.login(config.pcNumber, login, password);
-      this.token = res.sessionToken;
-      this.store.saveSession({ token: res.sessionToken, apiUrl: config.apiUrl, pcNumber: config.pcNumber });
       this.lastOkAt = Date.now();
       this.intervalSeconds = res.heartbeatIntervalSeconds || 60;
-      this.warned5 = this.warned1 = false;
-      clearTimeout(this.phaseTimer);
-      this.set({ online: true, lastError: null, message: null });
-      this.applyActive(res.session);
+      this.adopt(res.sessionToken, res.session);
       return { ok: true };
     } catch (err) {
       return toFailure(err);
     }
+  }
+
+  /** Takes ownership of a session (own login, or one the admin started from the web). */
+  private adopt(token: string, session: DesktopSessionState) {
+    const config = this.store.get();
+    this.token = token;
+    if (config.pcNumber !== null) this.store.saveSession({ token, apiUrl: config.apiUrl, pcNumber: config.pcNumber });
+    this.warned5 = this.warned1 = false;
+    clearTimeout(this.phaseTimer);
+    this.set({ online: true, lastError: null, message: null });
+    this.applyActive(session);
+  }
+
+  /** Can this kiosk take over a web-started session right now? (same conditions as a manual login) */
+  private canAcceptSession() {
+    if (this.token || this.state.resuming) return false;
+    if (this.state.phase === 'idle') return true;
+    return this.state.phase === 'message' && this.state.message?.kind !== 'COMMAND_SHUTDOWN';
   }
 
   /** Logout button. The UI locks immediately; the server call is best effort (the stale sweep covers failures). */
@@ -166,7 +201,7 @@ export class SessionManager {
 
   /** Launches a game from the current library (renderer passes only the id). Active session only. */
   async launch(gameId: number): Promise<ActionResult> {
-    if (this.state.phase !== 'active') return { ok: false, code: 'BUSY' };
+    if (this.state.phase !== 'active' || this.state.paused) return { ok: false, code: 'BUSY' };
     if (this.state.launchingGameId !== null) return { ok: false, code: 'BUSY' };
     const game = this.state.games.find((g) => g.id === gameId);
     if (!game) return { ok: false, code: 'GAME_NOT_FOUND' };
@@ -175,7 +210,7 @@ export class SessionManager {
     const result = await launchGame(game);
     this.set({ launchingGameId: null });
     if (!result.ok) return { ok: false, code: result.code };
-    if (this.state.phase !== 'active') return { ok: true }; // session ended while launching
+    if (this.state.phase !== 'active' || this.state.paused) return { ok: true }; // session ended/paused while launching
 
     this.set({ currentGame: game.name.slice(0, 100) });
     if (result.dryRun) this.showNotice('DRY_RUN_LAUNCH', game.name);
@@ -183,9 +218,28 @@ export class SessionManager {
     return { ok: true };
   }
 
+  /**
+   * "Desktop" → just shrink to the timer widget so the customer can use Windows.
+   * "Discord" → start Discord first, then shrink. Active session only.
+   */
+  async openApp(app: QuickApp): Promise<ActionResult> {
+    if (this.state.phase !== 'active' || this.state.paused || this.state.launchingGameId !== null) return { ok: false, code: 'BUSY' };
+    if (app === 'discord') {
+      this.set({ launchingGameId: QUICK_APP_LAUNCH_ID });
+      const result = await launchDiscord();
+      this.set({ launchingGameId: null });
+      if (!result.ok) return { ok: false, code: result.code };
+      if (this.state.phase !== 'active') return { ok: true };
+      if (!this.state.currentGame) this.set({ currentGame: 'Discord' });
+      if (result.dryRun) this.showNotice('DRY_RUN_LAUNCH', 'Discord');
+    }
+    await this.setWindowMode('mini');
+    return { ok: true };
+  }
+
   /** "Games" button in the mini widget → back to the full-screen library (games keep running). */
   async showLibrary() {
-    if (this.state.phase === 'active') await this.setWindowMode('full');
+    if (this.state.phase === 'active' && !this.state.paused) await this.setWindowMode('full');
   }
 
   private async loadGames() {
@@ -207,7 +261,8 @@ export class SessionManager {
 
   private processNamesToKill(): string[] {
     const all: DesktopGame[] = [...this.state.games, ...this.gameCache.load()];
-    return all.flatMap((g) => g.processNames ?? []);
+    // Discord is closed too, so the next customer doesn't find the previous one's chat open.
+    return [...all.flatMap((g) => g.processNames ?? []), DISCORD_PROCESS];
   }
 
   private killGames(reason: string) {
@@ -291,6 +346,20 @@ export class SessionManager {
     return { ok: true };
   }
 
+  /**
+   * "Exit" button on the lock screen: closes the app with the exit password. Not allowed while a
+   * customer's session is running (their time would keep being billed until the server times it out).
+   */
+  exitApp(password: string): ActionResult {
+    if (this.state.phase === 'active' || this.state.phase === 'expired') return { ok: false, code: 'BUSY' };
+    const result = checkExitPassword(password);
+    if (result === 'locked') return { ok: false, code: 'TOO_MANY_ATTEMPTS' };
+    if (result === 'wrong') return { ok: false, code: 'WRONG_EXIT_PASSWORD' };
+    console.log('[app] exit requested with the admin password');
+    this.opts.onQuit();
+    return { ok: true };
+  }
+
   quit(): ActionResult {
     if (!this.isSettingsUnlocked()) return { ok: false, code: 'FORBIDDEN' };
     this.opts.onQuit();
@@ -302,26 +371,67 @@ export class SessionManager {
   private scheduleHeartbeat(delayMs: number) {
     clearTimeout(this.heartbeatTimer);
     if (this.stopped) return;
+    this.nextHeartbeatAt = Date.now() + delayMs;
     this.heartbeatTimer = setTimeout(() => void this.heartbeat(), delayMs);
   }
 
+  /**
+   * Runs every 15 s without touching the network. Guards against a silently dead heartbeat loop
+   * (hung request, timer lost by Windows power throttling, sleep): restarts it, and makes the UI
+   * show "offline" / lock the session instead of pretending everything is fine.
+   */
+  private watchdog() {
+    if (this.stopped) return;
+    const now = Date.now();
+    if (!this.heartbeatInFlight && this.nextHeartbeatAt !== null && now - this.nextHeartbeatAt > HEARTBEAT_LATE_MS) {
+      console.warn(`[heartbeat] loop stalled (${Math.round((now - this.nextHeartbeatAt) / 1000)} s late) — restarting`);
+      this.scheduleHeartbeat(0);
+    }
+    if (this.lastOkAt === null) return;
+    const silentMs = now - this.lastOkAt;
+    if (this.state.online && silentMs > this.intervalSeconds * 1000 + HEARTBEAT_LATE_MS) {
+      console.warn(`[heartbeat] no successful heartbeat for ${Math.round(silentMs / 1000)} s — showing offline`);
+      this.set({ online: false });
+    }
+    if (this.state.phase === 'active' && silentMs >= OFFLINE_GRACE_MS) this.lockWithMessage('OFFLINE');
+  }
+
   private async heartbeat() {
+    if (this.heartbeatInFlight) return; // the running one reschedules itself
     const config = this.store.get();
     if (!isConfigured(config)) {
+      this.nextHeartbeatAt = null;
       this.set({ phase: 'unconfigured', configured: false, online: false });
       return; // resumed by saveSettings()
     }
     const token = this.token;
+    this.heartbeatInFlight = true;
+    this.nextHeartbeatAt = null;
+    const startedAt = Date.now();
     try {
       // currentGame rides along with the regular heartbeat — launching a game never triggers an extra call
-      const currentGame = token && this.state.phase === 'active' ? this.state.currentGame : null;
-      const res = await this.api.heartbeat(config.pcNumber, token ?? undefined, undefined, currentGame);
+      const currentGame = token && this.state.phase === 'active' && !this.state.paused ? this.state.currentGame : null;
+      const acceptSession = !token && this.canAcceptSession();
+      const res = await withTimeout(
+        this.api.heartbeat(config.pcNumber, token ?? undefined, undefined, currentGame, acceptSession),
+        HEARTBEAT_HARD_TIMEOUT_MS,
+      );
       this.lastOkAt = Date.now();
+      console.log(
+        `[heartbeat] ok ${this.lastOkAt - startedAt} ms phase=${this.state.phase}` +
+          (res.session ? ` session=${res.session.id} ${res.session.status} balance=${res.session.balanceSeconds}s` : '') +
+          (res.sessionError ? ` sessionError=${res.sessionError}` : '') +
+          (res.command ? ` command=${res.command}` : ''),
+      );
       this.intervalSeconds = res.heartbeatIntervalSeconds || 60;
       this.set({ online: true, lastError: null, pc: { number: res.pc.number, name: res.pc.name } });
 
       if (res.command) this.handleCommand(res.command);
       else if (token && token === this.token) this.handleSession(res);
+      else if (!token && res.sessionToken && res.session && this.canAcceptSession()) {
+        console.log(`[session] picked up web-started session ${res.session.id} for ${res.session.user.name}`);
+        this.adopt(res.sessionToken, res.session);
+      }
       this.maybeAutoLogin();
     } catch (err) {
       const code = err instanceof ApiRequestError ? err.code : 'NETWORK';
@@ -335,6 +445,7 @@ export class SessionManager {
         this.lockWithMessage('OFFLINE');
       }
     } finally {
+      this.heartbeatInFlight = false;
       this.scheduleHeartbeat(this.intervalSeconds * 1000);
     }
   }
@@ -415,6 +526,7 @@ export class SessionManager {
   private applyActive(s: DesktopSessionState) {
     const now = Date.now();
     const isNewSession = this.state.session?.id !== s.id;
+    const pausing = s.paused && (!this.state.paused || isNewSession);
     if (isNewSession) {
       this.warned5 = this.warned1 = false;
       this.set({ currentGame: null });
@@ -426,14 +538,23 @@ export class SessionManager {
       session: { id: s.id, startedAt: s.startedAt },
       balanceSeconds: s.balanceSeconds,
       balanceSyncedAt: now,
+      paused: s.paused,
       expired: null,
     });
-    this.armSessionTimers();
+    if (s.paused) {
+      // Admin paused from the web: freeze the countdown, close games, lock the screen.
+      this.clearSessionTimers();
+      this.set({ warning: null, launchingGameId: null });
+      if (pausing) this.endGamesAndRestore('session paused');
+    } else {
+      this.armSessionTimers();
+    }
     // Library is fetched on login / resume only — an event, not polling.
     if (isNewSession) void this.loadGames();
   }
 
   private remainingSeconds() {
+    if (this.state.paused) return this.state.balanceSeconds;
     return this.state.balanceSeconds - (Date.now() - this.state.balanceSyncedAt) / 1000;
   }
 
@@ -457,7 +578,7 @@ export class SessionManager {
   }
 
   private warn(level: 'LOW_5' | 'LOW_1') {
-    if (this.state.phase !== 'active') return;
+    if (this.state.phase !== 'active' || this.state.paused) return;
     if (level === 'LOW_5') this.warned5 = true;
     else this.warned5 = this.warned1 = true;
     const at = Date.now();
@@ -476,7 +597,7 @@ export class SessionManager {
 
   /** Local countdown reached zero: lock now, tell the server once (reason EXPIRED). */
   private async expire() {
-    if (this.state.phase !== 'active') return;
+    if (this.state.phase !== 'active' || this.state.paused) return;
     if (this.remainingSeconds() > 1) {
       this.armSessionTimers(); // timer was capped or clock adjusted
       return;
@@ -504,6 +625,7 @@ export class SessionManager {
     const delayMs = config.shutdownDelaySeconds * 1000;
     this.set({
       phase: 'expired',
+      paused: false,
       warning: null,
       message: null,
       balanceSeconds: 0,
@@ -532,6 +654,7 @@ export class SessionManager {
     this.set({
       phase: 'message',
       resuming: false,
+      paused: false,
       warning: null,
       expired: null,
       message: { kind, reason: reason ?? null, until: Date.now() + MESSAGE_VISIBLE_MS },
@@ -550,6 +673,7 @@ export class SessionManager {
       session: null,
       balanceSeconds: 0,
       balanceSyncedAt: Date.now(),
+      paused: false,
       launchingGameId: null,
       currentGame: null,
       warning: null,
@@ -586,4 +710,13 @@ function publicConfig(c: DesktopConfig) {
 function toFailure(err: unknown): ActionResult {
   if (err instanceof ApiRequestError) return { ok: false, code: err.code, details: err.details };
   return { ok: false, code: 'INTERNAL' };
+}
+
+/** Rejects if `promise` hasn't settled in `ms` — so one stuck request can never stop the heartbeat loop. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ApiRequestError('NETWORK', `no response in ${ms} ms`, 0)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }

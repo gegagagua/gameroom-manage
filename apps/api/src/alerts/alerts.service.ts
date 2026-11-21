@@ -14,7 +14,10 @@ export class AlertsService {
     private readonly clock: ClockService,
   ) {}
 
-  create(tx: Tx, data: { type: AlertType; userId: number; pcId?: number | null; sessionId?: number | null; message: string }) {
+  create(
+    tx: Tx,
+    data: { type: AlertType; userId: number; pcId?: number | null; sessionId?: number | null; message: string; secondsLeft?: number },
+  ) {
     return tx.alert.create({ data: { ...data, createdAt: this.clock.now() } });
   }
 

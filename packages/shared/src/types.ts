@@ -72,6 +72,8 @@ export interface AlertDto {
   id: number;
   type: AlertType;
   message: string;
+  /** LOW_BALANCE: balance when raised (≈10 min first warning, ≈5 min second) */
+  secondsLeft: number | null;
   createdAt: string;
   acknowledgedAt: string | null;
   acknowledgedBy: { id: number; name: string } | null;
@@ -101,6 +103,12 @@ export interface PcDto {
     startedAt: string;
     lastHeartbeatAt: string;
     consumedSeconds: number;
+    /** Paused by the admin — not billed. */
+    paused: boolean;
+    /** Started from the web and not driven by a kiosk: the server bills it every 30 s, it never times out. */
+    webManaged: boolean;
+    /** Billing cursor — balanceSeconds is exact as of this moment; remaining = balance − (now − billedUpTo) while running. */
+    billedUpTo: string;
     user: { id: number; name: string; phone: string | null; balanceSeconds: number };
   } | null;
 }
@@ -108,7 +116,10 @@ export interface PcDto {
 export interface PcsResponse {
   serverTime: string;
   heartbeatIntervalSeconds: number;
+  /** second warning (5 min) — red-ish/pulsing on the dashboard */
   lowBalanceThresholdSeconds: number;
+  /** first warning (10 min) — yellow border on the dashboard */
+  lowBalanceEarlySeconds: number;
   summary: { total: number; online: number; busy: number };
   items: PcDto[];
 }
@@ -198,6 +209,8 @@ export interface DesktopSessionState {
   endReason: SessionEndReason | null;
   consumedSeconds: number;
   balanceSeconds: number;
+  /** Paused by the admin — the kiosk locks and stops the countdown. */
+  paused: boolean;
   user: { id: number; name: string };
 }
 
@@ -215,6 +228,8 @@ export interface DesktopHeartbeatResponse {
   command: PcCommand | null;
   session: DesktopSessionState | null;
   sessionError: string | null;
+  /** Set when an idle PC (acceptSession) picked up a session the admin started from the web. */
+  sessionToken: string | null;
   heartbeatIntervalSeconds: number;
   lowBalanceThresholdSeconds: number;
 }

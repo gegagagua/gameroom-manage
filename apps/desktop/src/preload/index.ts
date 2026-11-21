@@ -13,12 +13,14 @@ const bridge: GrmBridge = {
   dismissMessage: () => ipcRenderer.invoke(IPC.dismissMessage),
   launchGame: (gameId) => ipcRenderer.invoke(IPC.launchGame, gameId),
   showLibrary: () => ipcRenderer.invoke(IPC.showLibrary),
+  openApp: (app) => ipcRenderer.invoke(IPC.openApp, app),
   unlockSettings: (email, password) => ipcRenderer.invoke(IPC.unlockSettings, email, password),
   getSettings: () => ipcRenderer.invoke(IPC.getSettings),
   testSettings: (draft) => ipcRenderer.invoke(IPC.testSettings, draft),
   saveSettings: (draft) => ipcRenderer.invoke(IPC.saveSettings, draft),
   lockSettings: () => ipcRenderer.invoke(IPC.lockSettings),
   quit: () => ipcRenderer.invoke(IPC.quit),
+  exitApp: (password: string) => ipcRenderer.invoke(IPC.exitApp, password),
 };
 
 contextBridge.exposeInMainWorld('grm', bridge);

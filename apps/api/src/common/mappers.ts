@@ -66,6 +66,7 @@ export function toAlertDto(a: Alert & { user: User; pc: Pc | null; acknowledgedB
     id: a.id,
     type: a.type,
     message: a.message,
+    secondsLeft: a.secondsLeft,
     createdAt: a.createdAt,
     acknowledgedAt: a.acknowledgedAt,
     acknowledgedBy: a.acknowledgedBy ? { id: a.acknowledgedBy.id, name: a.acknowledgedBy.name } : null,

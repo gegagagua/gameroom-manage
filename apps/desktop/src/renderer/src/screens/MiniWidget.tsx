@@ -4,7 +4,7 @@ import type { AppState } from '../../../common/ipc';
 import { beep, useNow } from '../hooks';
 import type { Translate } from '../i18n';
 
-/** ~360×110 always-on-top bar shown over a running game. */
+/** 180×55 always-on-top timer shown over a running game (kept small so it doesn't cover the game's corner). */
 export function MiniWidget({ state, t }: { state: AppState; t: Translate }) {
   const now = useNow(250);
   const [confirming, setConfirming] = useState(false);
@@ -19,7 +19,9 @@ export function MiniWidget({ state, t }: { state: AppState; t: Translate }) {
     return () => clearTimeout(timer);
   }, [confirming]);
 
-  const remaining = Math.max(0, Math.ceil(state.balanceSeconds - (now - state.balanceSyncedAt) / 1000));
+  const remaining = state.paused
+    ? state.balanceSeconds
+    : Math.max(0, Math.ceil(state.balanceSeconds - (now - state.balanceSyncedAt) / 1000));
   const level = remaining <= 60 ? 'critical' : remaining <= 300 ? 'low' : 'ok';
   const pulsing = state.warning ? `pulse-${state.warning.level === 'LOW_1' ? 'critical' : 'low'}` : '';
 
@@ -27,11 +29,6 @@ export function MiniWidget({ state, t }: { state: AppState; t: Translate }) {
     <div className={`mini level-${level} ${pulsing}`}>
       <div className="mini-left">
         <div className="mini-digits">{formatClock(remaining)}</div>
-        <div className="mini-meta">
-          <span className="mini-user">{state.user?.name}</span>
-          <span className="mini-pc">{state.pc.name ?? (state.pc.number ? t('pc.label', { n: state.pc.number }) : '')}</span>
-        </div>
-        {state.currentGame && <div className="mini-game">▶ {state.currentGame}</div>}
         {state.notice?.kind === 'DRY_RUN_LAUNCH' && <div className="mini-notice">{t('notice.DRY_RUN_LAUNCH', { name: state.notice.detail ?? '' })}</div>}
         {!state.online && <div className="mini-notice warn">{t('status.offline')}</div>}
       </div>

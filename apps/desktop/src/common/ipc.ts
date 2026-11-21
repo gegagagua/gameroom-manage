@@ -9,12 +9,14 @@ export const IPC = {
   dismissMessage: 'grm:dismiss-message',
   launchGame: 'grm:launch-game',
   showLibrary: 'grm:show-library',
+  openApp: 'grm:open-app',
   unlockSettings: 'grm:settings-unlock',
   getSettings: 'grm:settings-get',
   testSettings: 'grm:settings-test',
   saveSettings: 'grm:settings-save',
   lockSettings: 'grm:settings-lock',
   quit: 'grm:quit',
+  exitApp: 'grm:exit-app',
 } as const;
 
 export interface DesktopConfig {
@@ -49,6 +51,9 @@ export type MessageKind =
 
 export type NoticeKind = 'DRY_RUN_SHUTDOWN' | 'SHUTDOWN_FAILED' | 'DRY_RUN_LAUNCH';
 
+/** Built-in shortcuts next to the game library: the Windows desktop and Discord. */
+export type QuickApp = 'desktop' | 'discord';
+
 export interface AppState {
   phase: Phase;
   windowMode: WindowMode;
@@ -67,6 +72,8 @@ export interface AppState {
   /** server balance at `balanceSyncedAt` (epoch ms); the UI counts down locally from it */
   balanceSeconds: number;
   balanceSyncedAt: number;
+  /** admin paused the session from the web: screen locked, countdown frozen at `balanceSeconds` */
+  paused: boolean;
   /** game library (last fetched or cached list) */
   games: DesktopGame[];
   gamesStatus: 'idle' | 'loading' | 'ok' | 'error';
@@ -97,10 +104,13 @@ export interface GrmBridge {
   dismissMessage(): Promise<void>;
   launchGame(gameId: number): Promise<ActionResult>;
   showLibrary(): Promise<void>;
+  openApp(app: QuickApp): Promise<ActionResult>;
   unlockSettings(email: string, password: string): Promise<ActionResult>;
   getSettings(): Promise<SettingsPayload | null>;
   testSettings(draft: DesktopConfig): Promise<ActionResult & { pcName?: string }>;
   saveSettings(draft: DesktopConfig): Promise<ActionResult>;
   lockSettings(): Promise<void>;
   quit(): Promise<ActionResult>;
+  /** Close the kiosk app from the lock screen — needs the exit password. */
+  exitApp(password: string): Promise<ActionResult>;
 }

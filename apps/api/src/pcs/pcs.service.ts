@@ -40,6 +40,9 @@ export class PcsService {
               startedAt: s.startedAt,
               lastHeartbeatAt: s.lastHeartbeatAt,
               consumedSeconds: s.consumedSeconds,
+              paused: !!s.pausedAt,
+              webManaged: s.webManaged,
+              billedUpTo: s.lastBilledAt,
               user: { id: s.user.id, name: s.user.name, phone: s.user.phone, balanceSeconds: s.user.balanceSeconds },
             }
           : null,
@@ -49,6 +52,7 @@ export class PcsService {
       serverTime: now,
       heartbeatIntervalSeconds: this.config.heartbeatIntervalSeconds,
       lowBalanceThresholdSeconds: this.config.lowBalanceThresholdSeconds,
+      lowBalanceEarlySeconds: this.config.lowBalanceEarlySeconds,
       summary: {
         total: items.length,
         online: items.filter((p) => p.online).length,
@@ -73,10 +77,25 @@ export class PcsService {
     const now = this.clock.now();
     const ended = await this.prisma.$transaction(async (tx) => {
       await lockPc(tx, id);
-      await tx.pc.update({ where: { id }, data: { pendingCommand: command, commandIssuedAt: now, currentGame: null } });
+      const active = await tx.session.findFirst({ where: { pcId: id, status: SessionStatus.ACTIVE } });
+      // A web-run session has no kiosk to log out — don't leave a LOGOUT queued on an offline PC.
+      const queue = command === PcCommand.SHUTDOWN || !active?.webManaged;
+      await tx.pc.update({
+        where: { id },
+        data: queue ? { pendingCommand: command, commandIssuedAt: now, currentGame: null } : { currentGame: null },
+      });
       return this.billing.forceEndOnPcLocked(tx, id, now);
     });
     return { ok: true, endedSessionId: ended?.session.id ?? null };
+  }
+
+  startSession(id: number, userId: number) {
+    return this.billing.adminStart(id, userId);
+  }
+
+  async setPaused(id: number, paused: boolean) {
+    await this.ensureExists(id);
+    return this.billing.adminSetPaused(id, paused);
   }
 
   async cancelCommand(id: number) {

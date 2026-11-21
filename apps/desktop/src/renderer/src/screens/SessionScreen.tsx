@@ -2,7 +2,7 @@ import { formatClock, formatDuration, secondsToHours } from '@grm/shared';
 import { useEffect, useState } from 'react';
 import type { AppState } from '../../../common/ipc';
 import { useNow } from '../hooks';
-import type { Translate } from '../i18n';
+import { formatClockTime, type Translate } from '../i18n';
 import { GameLibrary } from './GameLibrary';
 import { TopBar } from './TopBar';
 
@@ -17,11 +17,12 @@ export function SessionScreen({ state, t }: { state: AppState; t: Translate }) {
     return () => clearTimeout(timer);
   }, [confirming]);
 
-  const remaining = Math.max(0, Math.ceil(state.balanceSeconds - (now - state.balanceSyncedAt) / 1000));
+  const remaining = state.paused
+    ? state.balanceSeconds
+    : Math.max(0, Math.ceil(state.balanceSeconds - (now - state.balanceSyncedAt) / 1000));
   const level = remaining <= 60 ? 'critical' : remaining <= 300 ? 'low' : 'ok';
   const startedAt = state.session ? new Date(state.session.startedAt) : null;
   const elapsed = startedAt ? Math.max(0, Math.floor((now - startedAt.getTime()) / 1000)) : 0;
-  const locale = lang === 'ka' ? 'ka-GE' : 'en-GB';
 
   const onLogout = () => {
     if (!confirming) {
@@ -57,7 +58,7 @@ export function SessionScreen({ state, t }: { state: AppState; t: Translate }) {
             </div>
             <div className="stat panel">
               <span>{t('session.started')}</span>
-              <strong>{startedAt ? startedAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '—'}</strong>
+              <strong>{startedAt ? formatClockTime(startedAt) : '—'}</strong>
             </div>
             <div className="stat panel">
               <span>{t('session.elapsed')}</span>

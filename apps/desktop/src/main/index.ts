@@ -1,8 +1,9 @@
-import { app, BrowserWindow, ipcMain, Menu, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, powerMonitor, powerSaveBlocker, screen } from 'electron';
 import { join } from 'node:path';
 import { IPC, type DesktopConfig } from '../common/ipc';
 import { setAppVersion } from './api-client';
 import { ConfigStore } from './config-store';
+import { installFileLogger } from './logger';
 import { SessionManager } from './session-manager';
 import { WindowController } from './window-mode';
 
@@ -22,6 +23,10 @@ const windowCtl = new WindowController(() => mainWindow, kiosk);
 // Warning beeps must play without a user gesture; no pinch/overscroll zoom.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-pinch');
+// While a game has focus the client is a background app: don't let Chromium throttle its timers.
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 if (process.platform === 'win32') app.setAppUserModelId('ge.gameroom.client');
 
 if (!app.requestSingleInstanceLock()) {
@@ -37,7 +42,11 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 function start() {
+  const logFile = installFileLogger(app.getPath('userData'));
+  console.log(`[app] start v${app.getVersion()} packaged=${app.isPackaged} log=${logFile}`);
   setAppVersion(app.getVersion());
+  // The heartbeat must keep running while a game is in the foreground (Windows may otherwise suspend/throttle us).
+  powerSaveBlocker.start('prevent-app-suspension');
   if (kiosk) Menu.setApplicationMenu(null);
 
   const store = new ConfigStore(app.getPath('userData'));
@@ -63,6 +72,7 @@ function start() {
 
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: store.get().autoStart });
   manager.start();
+  powerMonitor.on('resume', () => manager?.onSystemResume());
 }
 
 function createWindow() {
@@ -167,12 +177,14 @@ function registerIpc(m: SessionManager) {
   ipcMain.handle(IPC.dismissMessage, () => m.dismissMessage());
   ipcMain.handle(IPC.launchGame, (_e, gameId: number) => m.launch(Number(gameId)));
   ipcMain.handle(IPC.showLibrary, () => m.showLibrary());
+  ipcMain.handle(IPC.openApp, (_e, app: unknown) => m.openApp(app === 'discord' ? 'discord' : 'desktop'));
   ipcMain.handle(IPC.unlockSettings, (_e, email: string, password: string) => m.unlockSettings(String(email ?? ''), String(password ?? '')));
   ipcMain.handle(IPC.getSettings, () => m.getSettings());
   ipcMain.handle(IPC.testSettings, (_e, draft: DesktopConfig) => m.testSettings(draft));
   ipcMain.handle(IPC.saveSettings, (_e, draft: DesktopConfig) => m.saveSettings(draft));
   ipcMain.handle(IPC.lockSettings, () => m.lockSettings());
   ipcMain.handle(IPC.quit, () => m.quit());
+  ipcMain.handle(IPC.exitApp, (_e, password: string) => m.exitApp(String(password ?? '')));
 }
 
 app.on('window-all-closed', () => {

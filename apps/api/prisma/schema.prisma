@@ -111,6 +111,13 @@ model Session {
   endReason         SessionEndReason? @map("end_reason")
   consumedSeconds   Int               @default(0) @map("consumed_seconds")
   lowBalanceAlerted Boolean           @default(false) @map("low_balance_alerted")
+  // first (earlier) warning, LOW_BALANCE_EARLY_SECONDS (10 min) before the end
+  earlyWarningAlerted Boolean         @default(false) @map("early_warning_alerted")
+  // admin pause: while set, the session is not billed (still ACTIVE — it keeps the PC and the user)
+  pausedAt          DateTime?         @map("paused_at")
+  // started from the web admin and not (yet) driven by a kiosk: the server bills it on a timer
+  // instead of heartbeats, and it never times out; an idle kiosk on that PC takes it over
+  webManaged        Boolean           @default(false) @map("web_managed")
 
   user        User                @relation(fields: [userId], references: [id])
   pc          Pc                  @relation(fields: [pcId], references: [id])
@@ -153,6 +160,8 @@ model Alert {
   pcId             Int?      @map("pc_id")
   sessionId        Int?      @map("session_id")
   message          String
+  // LOW_BALANCE: balance when the alert was raised (10 min / 5 min stage)
+  secondsLeft      Int?      @map("seconds_left")
   createdAt        DateTime  @default(now()) @map("created_at")
   acknowledgedAt   DateTime? @map("acknowledged_at")
   acknowledgedById Int?      @map("acknowledged_by_id")

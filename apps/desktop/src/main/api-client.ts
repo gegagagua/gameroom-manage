@@ -27,8 +27,14 @@ export function apiBase(apiUrl: string) {
 export class ApiClient {
   constructor(private readonly connection: () => Connection) {}
 
-  heartbeat(pcNumber: number, token?: string, conn?: Connection, currentGame?: string | null) {
-    const body = { pcNumber, appVersion: appVersion(), ...(currentGame ? { currentGame: currentGame.slice(0, 100) } : {}) };
+  /** `acceptSession`: an idle kiosk may take over a session the admin started from the web. */
+  heartbeat(pcNumber: number, token?: string, conn?: Connection, currentGame?: string | null, acceptSession = false) {
+    const body = {
+      pcNumber,
+      appVersion: appVersion(),
+      ...(currentGame ? { currentGame: currentGame.slice(0, 100) } : {}),
+      ...(acceptSession ? { acceptSession: true } : {}),
+    };
     return this.request<DesktopHeartbeatResponse>('POST', 'heartbeat', body, token, conn);
   }
 
@@ -51,6 +57,26 @@ export class ApiClient {
 
   private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown, token?: string, conn?: Connection): Promise<T> {
     const { apiUrl, pcKey } = conn ?? this.connection();
+    // A plain timer, not AbortSignal.timeout(): that one has been seen to never fire in Electron's main
+    // process, which left a heartbeat hanging forever. The timer also covers reading the body.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error(`timeout after ${TIMEOUT_MS} ms`)), TIMEOUT_MS);
+    try {
+      return await this.send<T>(method, path, apiUrl, pcKey, controller.signal, body, token);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async send<T>(
+    method: 'GET' | 'POST',
+    path: string,
+    apiUrl: string,
+    pcKey: string,
+    signal: AbortSignal,
+    body?: unknown,
+    token?: string,
+  ): Promise<T> {
     let res: Response;
     try {
       res = await fetch(`${apiBase(apiUrl)}/desktop/${path}`, {
@@ -61,13 +87,18 @@ export class ApiClient {
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal,
       });
     } catch (err) {
       throw new ApiRequestError('NETWORK', (err as Error).message, 0);
     }
 
-    const text = await res.text();
+    let text: string;
+    try {
+      text = await res.text();
+    } catch (err) {
+      throw new ApiRequestError('NETWORK', (err as Error).message, 0);
+    }
     let data: unknown = null;
     try {
       data = text ? JSON.parse(text) : null;

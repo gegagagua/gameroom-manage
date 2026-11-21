@@ -35,6 +35,8 @@ export class AppConfig {
   readonly pcOnlineWindowSeconds: number;
   readonly sessionTimeoutSeconds: number;
   readonly lowBalanceThresholdSeconds: number;
+  /** first, earlier warning (default 10 min); the second one is lowBalanceThresholdSeconds (5 min) */
+  readonly lowBalanceEarlySeconds: number;
   /** On an EXPIRED logout, a leftover balance up to this many seconds is treated as clock drift and consumed. */
   readonly expireToleranceSeconds = 60;
 
@@ -83,6 +85,7 @@ export class AppConfig {
     this.pcOnlineWindowSeconds = int('PC_ONLINE_WINDOW_SECONDS', 150, 20, 3600);
     this.sessionTimeoutSeconds = int('SESSION_TIMEOUT_SECONDS', 180, 30, 3600);
     this.lowBalanceThresholdSeconds = int('LOW_BALANCE_THRESHOLD_SECONDS', 300, 0, 86400);
+    this.lowBalanceEarlySeconds = int('LOW_BALANCE_EARLY_SECONDS', 600, 0, 86400);
 
     this.timezone = str('APP_TIMEZONE', 'Asia/Tbilisi');
 

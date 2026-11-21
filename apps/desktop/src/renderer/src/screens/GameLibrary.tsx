@@ -1,6 +1,6 @@
 import type { DesktopGame } from '@grm/shared';
 import { useState } from 'react';
-import type { AppState } from '../../../common/ipc';
+import type { AppState, QuickApp } from '../../../common/ipc';
 import { errorText, type Translate } from '../i18n';
 
 function initials(name: string) {
@@ -53,12 +53,27 @@ export function GameLibrary({ state, t }: { state: AppState; t: Translate }) {
     if (!result.ok) setError(`${game.name}: ${errorText(result.code, lang, result.details)}`);
   };
 
+  const openApp = async (app: QuickApp) => {
+    setError(null);
+    const result = await window.grm.openApp(app);
+    if (!result.ok) setError(`${app === 'discord' ? 'Discord' : t('apps.desktop')}: ${errorText(result.code, lang, result.details)}`);
+  };
+  const busy = state.launchingGameId !== null;
+
   return (
     <section className="library panel">
       <div className="library-header">
         <h2>{t('games.title')}</h2>
         {state.gamesStatus === 'loading' && <span className="muted small">{t('games.loading')}</span>}
         {state.gamesStatus === 'error' && <span className="muted small">{t('games.cached')}</span>}
+        <div className="quick-apps">
+          <button className="btn ghost quick-app" onClick={() => void openApp('desktop')} disabled={busy}>
+            <span aria-hidden>🖥</span> {t('apps.desktop')}
+          </button>
+          <button className="btn ghost quick-app discord" onClick={() => void openApp('discord')} disabled={busy}>
+            {state.launchingGameId === -1 ? <span className="spinner small" /> : <span aria-hidden>💬</span>} Discord
+          </button>
+        </div>
       </div>
       {error && <div className="alert error">{error}</div>}
       {state.games.length === 0 ? (

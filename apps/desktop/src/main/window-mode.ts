@@ -1,16 +1,16 @@
 import { screen, type BrowserWindow, type Rectangle } from 'electron';
 import type { WindowMode } from '../common/ipc';
 
-export const MINI_WIDTH = 360;
-export const MINI_HEIGHT = 110;
-const MINI_MARGIN = 12;
+export const MINI_WIDTH = 180;
+export const MINI_HEIGHT = 55;
+const MINI_MARGIN = 8;
 
 const sameBounds = (a: Rectangle, b: Rectangle) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 
 /**
  * Owns the geometry of the single app window:
  *  - full (kiosk): exactly the primary display bounds (covers the taskbar), fullscreen, not resizable/movable;
- *  - mini: fixed ~360×110 always-on-top widget in the top-right of the work area while a game runs.
+ *  - mini: fixed 180×55 always-on-top widget in the top-right of the work area while a game runs.
  * Kiosk focus rules in index.ts must check `mode === 'full'`.
  */
 export class WindowController {

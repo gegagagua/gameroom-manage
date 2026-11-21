@@ -1,10 +1,19 @@
 'use client';
 
-import { formatClock, formatDuration, type GameDto, type PcCommand, type PcDto, type PcsResponse } from '@grm/shared';
+import {
+  formatClock,
+  formatDuration,
+  type GameDto,
+  type Paginated,
+  type PcCommand,
+  type PcDto,
+  type PcsResponse,
+  type UserDto,
+} from '@grm/shared';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import useSWR from 'swr';
-import { api } from '@/lib/api';
+import { api, withQuery } from '@/lib/api';
 import { cn, formatTime, relativeTime } from '@/lib/format';
 import { useI18n } from '@/lib/i18n';
 import type { MessageKey } from '@/lib/messages';
@@ -16,7 +25,7 @@ import { Badge, Button, ConfirmModal, Empty, FormError, Input, Loading, Modal, T
 
 // ------------------------------------------------------------------ live data
 
-export type StationState = 'offline' | 'free' | 'busy' | 'low' | 'critical';
+export type StationState = 'offline' | 'free' | 'busy' | 'paused' | 'low' | 'critical';
 export type RoomFilter = 'all' | 'busy' | 'free' | 'offline' | 'low';
 type RoomView = 'grid' | 'table';
 
@@ -53,24 +62,26 @@ export interface LiveSession {
   remaining: number;
   elapsed: number;
   progress: number;
-  level: 'busy' | 'low' | 'critical';
+  level: 'busy' | 'paused' | 'low' | 'critical';
 }
 
 /**
- * Estimates the session between heartbeats: the API bills up to lastHeartbeatAt, so
- * remaining ≈ balance − (serverNow − lastHeartbeatAt), clamped at 0.
+ * Estimates the session between polls: the balance is exact as of `billedUpTo` (heartbeat or the
+ * server's 30 s sweep for web-run sessions), so remaining ≈ balance − (serverNow − billedUpTo), clamped at 0.
  */
-export function liveSession(pc: PcDto, serverNow: number, lowThreshold: number): LiveSession | null {
+export function liveSession(pc: PcDto, serverNow: number, earlyThreshold: number): LiveSession | null {
   const s = pc.currentSession;
   if (!s) return null;
-  const sinceHeartbeat = Math.max(0, (serverNow - Date.parse(s.lastHeartbeatAt)) / 1000);
-  const remaining = Math.max(0, Math.floor(s.user.balanceSeconds - sinceHeartbeat));
+  // Paused: nothing is billed, so no ticking.
+  const sinceBilled = s.paused ? 0 : Math.max(0, (serverNow - Date.parse(s.billedUpTo)) / 1000);
+  const remaining = Math.max(0, Math.floor(s.user.balanceSeconds - sinceBilled));
   const total = s.user.balanceSeconds + s.consumedSeconds;
   return {
     remaining,
-    elapsed: Math.max(0, Math.floor((serverNow - Date.parse(s.startedAt)) / 1000)),
+    // played time only: what was billed so far + the running part (stops while paused)
+    elapsed: s.consumedSeconds + Math.floor(sinceBilled),
     progress: total > 0 ? Math.min(1, remaining / total) : 0,
-    level: remaining <= CRITICAL_SECONDS ? 'critical' : remaining <= lowThreshold ? 'low' : 'busy',
+    level: s.paused ? 'paused' : remaining <= CRITICAL_SECONDS ? 'critical' : remaining <= earlyThreshold ? 'low' : 'busy',
   };
 }
 
@@ -78,7 +89,7 @@ const stateOf = (pc: PcDto, live: LiveSession | null): StationState => live?.lev
 
 const matchesFilter = (state: StationState, filter: RoomFilter) =>
   filter === 'all' ||
-  (filter === 'busy' && (state === 'busy' || state === 'low' || state === 'critical')) ||
+  (filter === 'busy' && (state === 'busy' || state === 'paused' || state === 'low' || state === 'critical')) ||
   (filter === 'low' && (state === 'low' || state === 'critical')) ||
   filter === state;
 
@@ -115,6 +126,15 @@ const THEME: Record<
     bar: 'bg-gradient-to-r from-violet-500 to-cyan-400',
     number: 'text-white',
   },
+  paused: {
+    label: 'room.paused',
+    card: 'border-sky-500/50 bg-gradient-to-b from-sky-500/15 via-zinc-900/80 to-zinc-900/90 shadow-[0_0_32px_-12px_rgba(14,165,233,0.6)] hover:border-sky-400/70',
+    text: 'text-sky-200',
+    dot: 'bg-sky-400 text-sky-400',
+    icon: 'text-sky-300',
+    bar: 'bg-sky-500/70',
+    number: 'text-white',
+  },
   low: {
     label: 'room.lowBalance',
     card: 'border-amber-500/60 bg-gradient-to-b from-amber-500/15 via-zinc-900/80 to-zinc-900/90 shadow-[0_0_36px_-10px_rgba(245,158,11,0.6)] hover:border-amber-400/80',
@@ -137,6 +157,7 @@ const THEME: Record<
 
 const countdownTone: Record<LiveSession['level'], string> = {
   busy: 'text-white',
+  paused: 'text-sky-200',
   low: 'text-amber-300',
   critical: 'text-red-400',
 };
@@ -375,6 +396,224 @@ function StationMenu({ pc, actions, openUp = false }: { pc: PcDto; actions: PcAc
   );
 }
 
+// ------------------------------------------------------------------ start / pause
+
+/** Start ▶ / Pause ⏸ + Exit ⏏ for the PC's session — take effect at once (the kiosk follows on its next sync). */
+function SessionToggle({ pc, className }: { pc: PcDto; className?: string }) {
+  return (
+    <div className={cn('flex gap-2', className)}>
+      <PauseButton pc={pc} className="flex-1" />
+      <ExitButton pc={pc} className="flex-1" />
+    </div>
+  );
+}
+
+/** Ends the session (customer left) so the PC is free for the next one. Second click confirms. */
+function ExitButton({ pc, className }: { pc: PcDto; className?: string }) {
+  const { t, errText } = useI18n();
+  const toast = useToast();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!confirming) return;
+    const id = setTimeout(() => setConfirming(false), 4000);
+    return () => clearTimeout(id);
+  }, [confirming]);
+
+  const exit = async () => {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(`/pcs/${pc.id}/command`, { method: 'POST', body: { command: 'LOGOUT' } });
+      toast.success(t('room.exitedToast'));
+      await revalidate('/pcs', '/alerts', '/users');
+    } catch (err) {
+      toast.error(errText(err));
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <Button variant="danger" size="sm" className={cn(confirming && 'animate-pulse', className)} loading={busy} onClick={() => void exit()}>
+      ⏏ {t(confirming ? 'room.exitConfirm' : 'room.exit')}
+    </Button>
+  );
+}
+
+function PauseButton({ pc, className }: { pc: PcDto; className?: string }) {
+  const { t, errText } = useI18n();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const s = pc.currentSession;
+  if (!s) return null;
+
+  const run = async (action: 'pause' | 'resume') => {
+    setBusy(true);
+    try {
+      await api(`/pcs/${pc.id}/session/${action}`, { method: 'POST' });
+      toast.success(t(action === 'pause' ? 'room.pausedToast' : 'room.resumedToast'));
+      await revalidate('/pcs');
+    } catch (err) {
+      toast.error(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return s.paused ? (
+    <Button size="sm" className={cn('bg-emerald-600! text-white! hover:bg-emerald-500!', className)} loading={busy} onClick={() => void run('resume')} title={t('room.pausedHint')}>
+      ▶ {t('room.start')}
+    </Button>
+  ) : (
+    <Button variant="warning" size="sm" className={className} loading={busy} onClick={() => void run('pause')}>
+      ⏸ {t('room.pause')}
+    </Button>
+  );
+}
+
+/** Customer search dropdown + Start: seats the customer on this (free, online) PC from the web. */
+function StartSessionForm({ pc }: { pc: PcDto }) {
+  const { t, lang, errText } = useI18n();
+  const toast = useToast();
+  const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<UserDto | null>(null);
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(query.trim()), 250);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const { data, isLoading } = useSWR<Paginated<UserDto>>(
+    open ? withQuery('/users', { search: debounced, status: 'active', pageSize: 8 }) : null,
+    { keepPreviousData: true },
+  );
+
+  const pick = (u: UserDto) => {
+    setSelected(u);
+    setQuery('');
+    setOpen(false);
+  };
+
+  const start = async () => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await api(`/pcs/${pc.id}/session`, { method: 'POST', body: { userId: selected.id } });
+      toast.success(t('room.startedToast'));
+      setSelected(null);
+      await revalidate('/pcs', '/users');
+    } catch (err) {
+      toast.error(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative space-y-2">
+      {selected ? (
+        <button
+          type="button"
+          onClick={() => {
+            setSelected(null);
+            setOpen(true);
+          }}
+          className="flex w-full items-center gap-2 rounded-lg border border-emerald-500/40 bg-black/30 px-2 py-1.5 text-left transition hover:border-emerald-400/70"
+        >
+          <Avatar name={selected.name} className="h-7 w-7 text-[11px]" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-white">{selected.name}</span>
+            <span className="block truncate text-xs tabular-nums text-zinc-400">{formatDuration(selected.balanceSeconds, lang)}</span>
+          </span>
+          <span className="text-xs text-zinc-500">▾</span>
+        </button>
+      ) : (
+        <div className="relative">
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            placeholder={t('room.searchUser')}
+            aria-label={t('room.pickUser')}
+            className="w-full rounded-lg border border-zinc-700 bg-black/30 px-3 py-1.5 pr-7 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500/70 focus:outline-none"
+          />
+          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-500">▾</span>
+        </div>
+      )}
+
+      {open && !selected && (
+        <div role="listbox" className="animate-toast-in absolute inset-x-0 top-9 z-30 max-h-64 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900/95 p-1 shadow-2xl backdrop-blur">
+          {isLoading && !data ? (
+            <div className="px-3 py-2 text-xs text-zinc-500">…</div>
+          ) : !data?.items.length ? (
+            <div className="px-3 py-2 text-xs text-zinc-500">{t('room.noUsers')}</div>
+          ) : (
+            data.items.map((u) => {
+              const elsewhere = u.activeSession?.pc;
+              const disabled = u.balanceSeconds <= 0 || !!elsewhere;
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  disabled={disabled}
+                  onClick={() => pick(u)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  <Avatar name={u.name} className="h-7 w-7 text-[11px]" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-white">{u.name}</span>
+                    <span className="block truncate text-xs text-zinc-500">{u.username ?? u.phone ?? u.email}</span>
+                  </span>
+                  <span className="shrink-0 text-right text-xs tabular-nums text-zinc-400">
+                    {elsewhere
+                      ? t('room.onPc', { n: elsewhere.number })
+                      : u.balanceSeconds <= 0
+                        ? t('room.zeroBalance')
+                        : formatDuration(u.balanceSeconds, lang)}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      <Button size="sm" className="w-full bg-emerald-600! text-white! hover:bg-emerald-500!" disabled={!selected} loading={busy} onClick={() => void start()}>
+        ▶ {t('room.start')}
+      </Button>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------ station card
 
 function StationCard({
@@ -383,22 +622,33 @@ function StationCard({
   now,
   gamesByName,
   actions,
+  lowThreshold,
 }: {
   pc: PcDto;
   live: LiveSession | null;
   now: number;
   gamesByName: Map<string, GameDto>;
   actions: PcActions;
+  /** second warning (5 min): the yellow border starts pulsing */
+  lowThreshold: number;
 }) {
   const { t, lang } = useI18n();
   const state = stateOf(pc, live);
   const th = THEME[state];
+  const urgent = state === 'low' && !!live && live.remaining <= lowThreshold;
   const s = pc.currentSession;
   const game = s?.game ? gamesByName.get(s.game.trim().toLowerCase()) : undefined;
 
   return (
     // No overflow-hidden: the ⋯ menu must be able to extend past the card.
-    <article className={cn('group relative flex min-h-[260px] flex-col rounded-2xl border p-4 transition-all duration-300 hover:-translate-y-0.5 focus-within:z-20 hover:z-10', th.card)}>
+    <article
+      className={cn(
+        'group relative flex min-h-[260px] flex-col rounded-2xl border p-4 transition-all duration-300 hover:-translate-y-0.5 focus-within:z-20 hover:z-10',
+        th.card,
+        state === 'low' && 'border-2',
+        urgent && 'station-warning',
+      )}
+    >
       {/* faint top sheen */}
       <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
 
@@ -416,13 +666,15 @@ function StationCard({
       </header>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <StatusPill state={state} pulse={state !== 'offline'} />
-        {s && !pc.online && <Badge tone="gray">📡 {t('room.stale')}</Badge>}
+        <StatusPill state={state} pulse={state !== 'offline' && state !== 'paused'} />
+        {s?.webManaged && <Badge tone="gray">🌐 {t('room.webSession')}</Badge>}
+        {s && !s.webManaged && !pc.online && <Badge tone="gray">📡 {t('room.stale')}</Badge>}
         {pc.pendingCommand && <Badge tone="amber">⏳ {t(`pcs.cmd.${pc.pendingCommand}`)}</Badge>}
       </div>
 
       {s && live ? (
         <div className="mt-4 flex flex-1 flex-col">
+          <div className="mb-1 text-[11px] font-medium uppercase tracking-widest text-zinc-500">{t('room.player')}</div>
           <Link href={`/admin/users/${s.user.id}`} className="-mx-1 flex items-center gap-2.5 rounded-lg px-1 py-0.5 transition hover:bg-white/5">
             <Avatar name={s.user.name} />
             <div className="min-w-0">
@@ -458,15 +710,16 @@ function StationCard({
                 {t('room.elapsed')} {formatDuration(live.elapsed, lang)}
               </span>
             </div>
+            <SessionToggle pc={pc} className="mt-3 w-full" />
           </div>
         </div>
       ) : (
         <div className="mt-4 flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 py-3 text-center">
-            <StationIcon className={cn('h-12 w-12', state === 'free' ? 'text-emerald-400/30' : 'text-zinc-800')} />
-            <div className={cn('text-xs', state === 'free' ? 'text-emerald-300/80' : 'text-zinc-600')}>
-              {t(state === 'free' ? 'room.freeHint' : 'room.offlineHint')}
+          <div className="flex flex-1 flex-col justify-center gap-2 py-3">
+            <div className={cn('text-[11px] font-medium uppercase tracking-widest', state === 'free' ? 'text-emerald-300/70' : 'text-zinc-500')}>
+              {t('room.pickUser')}
             </div>
+            <StartSessionForm pc={pc} />
           </div>
           <dl className="mt-auto space-y-0.5 border-t border-white/5 pt-2 text-xs text-zinc-500">
             <div className="flex justify-between gap-2">
@@ -553,7 +806,8 @@ function StationTable({ rows, now, actions }: { rows: { pc: PcDto; live: LiveSes
                   {pc.appVersion && <div>v{pc.appVersion}</div>}
                 </Td>
                 <Td className="text-right">
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-end gap-2">
+                    {s && <SessionToggle pc={pc} />}
                     {/* the table scrolls horizontally (clips vertically), so bottom rows open the menu upward */}
                     <StationMenu pc={pc} actions={actions} openUp={rows.length > 3 && index >= rows.length - 3} />
                   </div>
@@ -623,7 +877,7 @@ export function PcRoom({ showSummary = false, allowTableView = false }: { showSu
 
   const serverNow = now + (sync?.offsetMs ?? 0);
   const rows = useMemo(
-    () => (data?.items ?? []).map((pc) => ({ pc, live: liveSession(pc, serverNow, data?.lowBalanceThresholdSeconds ?? 300) })),
+    () => (data?.items ?? []).map((pc) => ({ pc, live: liveSession(pc, serverNow, data?.lowBalanceEarlySeconds ?? 600) })),
     [data, serverNow],
   );
 
@@ -728,7 +982,15 @@ export function PcRoom({ showSummary = false, allowTableView = false }: { showSu
       ) : (
         <div className="room-floor grid grid-cols-2 gap-3 rounded-3xl sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {visible.map(({ pc, live }) => (
-            <StationCard key={pc.id} pc={pc} live={live} now={now} gamesByName={gamesByName} actions={actions} />
+            <StationCard
+              key={pc.id}
+              pc={pc}
+              live={live}
+              now={now}
+              gamesByName={gamesByName}
+              actions={actions}
+              lowThreshold={data.lowBalanceThresholdSeconds}
+            />
           ))}
         </div>
       )}

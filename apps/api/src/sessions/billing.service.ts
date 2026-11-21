@@ -21,6 +21,8 @@ export interface SessionState {
   endReason: SessionEndReason | null;
   consumedSeconds: number;
   balanceSeconds: number;
+  /** Paused by an admin from the web — not billed, the kiosk locks. */
+  paused: boolean;
   user: { id: number; name: string };
 }
 
@@ -86,7 +88,10 @@ export class BillingService {
           await this.endLocked(tx, charged.session, now, SessionEndReason.BALANCE_DEPLETED, now);
           return { kind: 'no_balance' };
         }
-        const session = await tx.session.update({ where: { id: pcActive.id }, data: { lastHeartbeatAt: now } });
+        const session = await tx.session.update({
+          where: { id: pcActive.id },
+          data: { lastHeartbeatAt: now, webManaged: false },
+        });
         return { kind: 'ok', session, balanceSeconds: charged.balanceSeconds, resumed: true };
       }
 
@@ -130,8 +135,7 @@ export class BillingService {
     }
     if (outcome.kind === 'no_balance') throw ApiError.forbidden(ErrorCode.NO_BALANCE, 'No balance left');
 
-    const payload: PcSessionJwtPayload = { sub: user.id, sid: outcome.session.id, pc: pc.number, typ: 'pc' };
-    const sessionToken = await this.jwt.signAsync(payload, { expiresIn: 7 * 24 * 3600 });
+    const sessionToken = await this.signPcToken(user.id, outcome.session.id, pc.number);
     return {
       sessionToken,
       resumed: outcome.resumed,
@@ -167,10 +171,18 @@ export class BillingService {
 
     let session: SessionState | null = null;
     let sessionError: ErrorCode | null = null;
+    let claimedToken: string | null = null;
     if (sessionToken) {
       const payload = await this.verifyPcToken(sessionToken, pc.number);
       session = payload ? await this.billHeartbeat(payload.sid, now) : null;
       if (!session) sessionError = ErrorCode.INVALID_SESSION_TOKEN;
+    } else if (dto.acceptSession && !command) {
+      // An idle kiosk picks up a session the admin started from the web for this PC.
+      const claimed = await this.claimPendingSession(pc.id, now);
+      if (claimed) {
+        session = claimed;
+        claimedToken = await this.signPcToken(claimed.user.id, claimed.id, pc.number);
+      }
     }
 
     const currentGame = session?.status === SessionStatus.ACTIVE ? dto.currentGame?.trim() || null : null;
@@ -184,6 +196,7 @@ export class BillingService {
       command,
       session,
       sessionError,
+      sessionToken: claimedToken,
       heartbeatIntervalSeconds: this.config.heartbeatIntervalSeconds,
       lowBalanceThresholdSeconds: this.config.lowBalanceThresholdSeconds,
     };
@@ -255,12 +268,128 @@ export class BillingService {
     });
   }
 
+  /**
+   * Admin seats a customer on a PC from the web (the PC may be offline). Billing starts now; the server
+   * bills it on a timer (`billWebSessions`) until a kiosk on that PC takes it over.
+   */
+  async adminStart(pcId: number, userId: number) {
+    const now = this.clock.now();
+    const user = await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null } });
+    if (!user) throw ApiError.notFound(ErrorCode.USER_NOT_FOUND, 'User not found');
+    if (!user.isActive) throw ApiError.forbidden(ErrorCode.USER_INACTIVE, 'User is deactivated');
+
+    type Outcome = { kind: 'ok'; sessionId: number } | { kind: ErrorCode; pcId?: number };
+    const outcome = await this.prisma.$transaction<Outcome>(async (tx) => {
+      await lockPc(tx, pcId);
+      const pc = await tx.pc.findUnique({ where: { id: pcId } });
+      if (!pc) return { kind: ErrorCode.PC_NOT_FOUND };
+      if (pc.pendingCommand === 'SHUTDOWN') return { kind: ErrorCode.PC_BUSY };
+      if (await tx.session.findFirst({ where: { pcId, status: SessionStatus.ACTIVE } })) return { kind: ErrorCode.PC_BUSY };
+
+      await lockUsers(tx, [userId]);
+      const userActive = await tx.session.findFirst({ where: { userId, status: SessionStatus.ACTIVE } });
+      if (userActive) {
+        const stale = secondsBetween(userActive.lastHeartbeatAt, now) > this.config.sessionTimeoutSeconds;
+        if (!stale) return { kind: ErrorCode.ALREADY_LOGGED_IN_ELSEWHERE, pcId: userActive.pcId };
+        await lockSession(tx, userActive.id);
+        await this.endLocked(tx, userActive, now, SessionEndReason.TIMEOUT, this.probableEnd(userActive, now));
+      }
+      const { balanceSeconds } = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      if (balanceSeconds <= 0) return { kind: ErrorCode.NO_BALANCE };
+
+      // A queued LOGOUT is about the previous customer — it must not kick the new one.
+      if (pc.pendingCommand) await tx.pc.update({ where: { id: pcId }, data: { pendingCommand: null, commandIssuedAt: null } });
+      const session = await tx.session.create({
+        data: {
+          userId,
+          pcId,
+          startedAt: now,
+          lastBilledAt: now,
+          lastHeartbeatAt: now,
+          webManaged: true,
+        },
+      });
+      await tx.balanceTransaction.create({
+        data: {
+          userId,
+          type: TransactionType.SESSION_CHARGE,
+          amountSeconds: 0,
+          balanceAfterSeconds: balanceSeconds,
+          sessionId: session.id,
+          note: pc.name,
+          createdAt: now,
+        },
+      });
+      return { kind: 'ok', sessionId: session.id };
+    });
+
+    switch (outcome.kind) {
+      case 'ok':
+        return { ok: true, sessionId: outcome.sessionId };
+      case ErrorCode.PC_NOT_FOUND:
+        throw ApiError.notFound(ErrorCode.PC_NOT_FOUND, 'PC not found');
+      case ErrorCode.PC_BUSY:
+        throw ApiError.conflict(ErrorCode.PC_BUSY, 'PC already has a session');
+      case ErrorCode.NO_BALANCE:
+        throw ApiError.forbidden(ErrorCode.NO_BALANCE, 'No balance left');
+      case ErrorCode.ALREADY_LOGGED_IN_ELSEWHERE: {
+        const other = await this.prisma.pc.findUnique({ where: { id: outcome.pcId } });
+        throw ApiError.conflict(ErrorCode.ALREADY_LOGGED_IN_ELSEWHERE, `User is already logged in on ${other?.name}`, {
+          pcNumber: other?.number,
+        });
+      }
+      default:
+        throw ApiError.badRequest(outcome.kind, outcome.kind);
+    }
+  }
+
+  /** Pauses (`paused = true`) or resumes the active session on a PC. Billing stops at once on pause. */
+  async adminSetPaused(pcId: number, paused: boolean) {
+    const now = this.clock.now();
+    const result = await this.prisma.$transaction(async (tx) => {
+      await lockPc(tx, pcId);
+      const active = await tx.session.findFirst({ where: { pcId, status: SessionStatus.ACTIVE } });
+      if (!active) return null;
+      await lockUsers(tx, [active.userId]);
+      await lockSession(tx, active.id);
+      const s = await tx.session.findUniqueOrThrow({ where: { id: active.id } });
+      if (s.status !== SessionStatus.ACTIVE) return null;
+
+      if (paused) {
+        if (s.pausedAt) return s;
+        const charged = await this.charge(tx, s, now); // bill up to the pause moment
+        if (charged.balanceSeconds === 0) {
+          return (await this.endLocked(tx, charged.session, now, SessionEndReason.BALANCE_DEPLETED, now)).session;
+        }
+        return tx.session.update({ where: { id: s.id }, data: { pausedAt: now } });
+      }
+      if (!s.pausedAt) return s;
+      return tx.session.update({ where: { id: s.id }, data: { pausedAt: null, lastBilledAt: now } });
+    });
+    if (!result) throw ApiError.conflict(ErrorCode.NO_ACTIVE_SESSION, 'PC has no active session');
+    return { ok: true, sessionId: result.id, status: result.status, paused: !!result.pausedAt };
+  }
+
+  /**
+   * Bills web-started sessions no kiosk has taken over (they get no heartbeats): same rules as a
+   * heartbeat — low-balance alert, BALANCE_DEPLETED at 0. Run by the 30 s sweep. Returns the number billed.
+   */
+  async billWebSessions(): Promise<number> {
+    const now = this.clock.now();
+    const sessions = await this.prisma.session.findMany({
+      where: { status: SessionStatus.ACTIVE, webManaged: true },
+      select: { id: true },
+    });
+    for (const { id } of sessions) await this.billHeartbeat(id, now);
+    return sessions.length;
+  }
+
   /** Closes ACTIVE sessions whose PC stopped sending heartbeats. Returns the number closed. */
   async closeStaleSessions(): Promise<number> {
     const now = this.clock.now();
     const cutoff = new Date(now.getTime() - this.config.sessionTimeoutSeconds * 1000);
     const stale = await this.prisma.session.findMany({
-      where: { status: SessionStatus.ACTIVE, lastHeartbeatAt: { lt: cutoff } },
+      where: { status: SessionStatus.ACTIVE, webManaged: false, lastHeartbeatAt: { lt: cutoff } },
       select: { id: true, userId: true },
     });
     let closed = 0;
@@ -269,7 +398,7 @@ export class BillingService {
         await lockUsers(tx, [userId]);
         await lockSession(tx, id);
         const s = await tx.session.findUniqueOrThrow({ where: { id } });
-        if (s.status !== SessionStatus.ACTIVE || s.lastHeartbeatAt >= cutoff) return false;
+        if (s.status !== SessionStatus.ACTIVE || s.webManaged || s.lastHeartbeatAt >= cutoff) return false;
         await this.endLocked(tx, s, now, SessionEndReason.TIMEOUT, this.probableEnd(s, now));
         return true;
       });
@@ -280,6 +409,32 @@ export class BillingService {
   }
 
   // ---------------------------------------------------------------- internals
+
+
+  private signPcToken(userId: number, sessionId: number, pcNumber: number) {
+    const payload: PcSessionJwtPayload = { sub: userId, sid: sessionId, pc: pcNumber, typ: 'pc' };
+    return this.jwt.signAsync(payload, { expiresIn: 7 * 24 * 3600 });
+  }
+
+  /** Hands a web-started session to the idle kiosk on that PC; from now on its heartbeats bill it. */
+  private async claimPendingSession(pcId: number, now: Date): Promise<SessionState | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await lockPc(tx, pcId);
+      const s0 = await tx.session.findFirst({ where: { pcId, status: SessionStatus.ACTIVE, webManaged: true } });
+      if (!s0) return null;
+      await lockUsers(tx, [s0.userId]);
+      await lockSession(tx, s0.id);
+      const s = await tx.session.findUniqueOrThrow({ where: { id: s0.id }, include: { user: true } });
+      if (s.status !== SessionStatus.ACTIVE || !s.webManaged) return null;
+      const charged = await this.charge(tx, s, now);
+      if (charged.balanceSeconds === 0) {
+        await this.endLocked(tx, charged.session, now, SessionEndReason.BALANCE_DEPLETED, now);
+        return null;
+      }
+      const updated = await tx.session.update({ where: { id: s.id }, data: { lastHeartbeatAt: now, webManaged: false } });
+      return this.toState(updated, charged.balanceSeconds, s.user);
+    });
+  }
 
   private async billHeartbeat(sessionId: number, now: Date): Promise<SessionState | null> {
     return this.prisma.$transaction(async (tx) => {
@@ -297,15 +452,29 @@ export class BillingService {
       }
 
       let updated = await tx.session.update({ where: { id: s.id }, data: { lastHeartbeatAt: now } });
-      if (charged.balanceSeconds <= this.config.lowBalanceThresholdSeconds && !updated.lowBalanceAlerted) {
+      // Two warnings: 10 min (early) and 5 min. Dropping straight below 5 min skips the early one.
+      const left = charged.balanceSeconds;
+      const stage =
+        updated.pausedAt
+          ? null
+          : left <= this.config.lowBalanceThresholdSeconds && !updated.lowBalanceAlerted
+            ? 'low'
+            : left <= this.config.lowBalanceEarlySeconds && !updated.earlyWarningAlerted && !updated.lowBalanceAlerted
+              ? 'early'
+              : null;
+      if (stage) {
         await this.alerts.create(tx, {
           type: AlertType.LOW_BALANCE,
           userId: s.userId,
           pcId: s.pcId,
           sessionId: s.id,
-          message: `${s.user.name} has ${Math.ceil(charged.balanceSeconds / 60)} min left on ${s.pc.name}`,
+          secondsLeft: left,
+          message: `${s.user.name} has ${Math.ceil(left / 60)} min left on ${s.pc.name}`,
         });
-        updated = await tx.session.update({ where: { id: s.id }, data: { lowBalanceAlerted: true } });
+        updated = await tx.session.update({
+          where: { id: s.id },
+          data: stage === 'low' ? { lowBalanceAlerted: true, earlyWarningAlerted: true } : { earlyWarningAlerted: true },
+        });
       }
       return this.toState(updated, charged.balanceSeconds, s.user);
     });
@@ -317,8 +486,13 @@ export class BillingService {
    */
   private async charge(tx: Tx, session: Session, upTo: Date, opts: { consumeAll?: boolean } = {}) {
     const user = await tx.user.findUniqueOrThrow({ where: { id: session.userId } });
-    const elapsed = Math.max(0, secondsBetween(session.lastBilledAt, upTo));
-    const amount = opts.consumeAll ? user.balanceSeconds : Math.min(elapsed, user.balanceSeconds);
+    // Paused: nothing is billed and the cursor stays put; resuming moves it to the resume moment.
+    const elapsed = session.pausedAt ? 0 : Math.max(0, secondsBetween(session.lastBilledAt, upTo));
+    const amount = session.pausedAt
+      ? 0
+      : opts.consumeAll
+        ? user.balanceSeconds
+        : Math.min(elapsed, user.balanceSeconds);
     const balanceSeconds = user.balanceSeconds - amount;
     const lastBilledAt = new Date(session.lastBilledAt.getTime() + elapsed * 1000);
 
@@ -400,6 +574,7 @@ export class BillingService {
       endReason: s.endReason,
       consumedSeconds: s.consumedSeconds,
       balanceSeconds,
+      paused: !!s.pausedAt,
       user: { id: user.id, name: user.name },
     };
   }

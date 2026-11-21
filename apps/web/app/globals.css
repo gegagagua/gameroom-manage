@@ -57,6 +57,20 @@ input[type='date']::-webkit-calendar-picker-indicator {
   animation: station-critical 1.4s ease-in-out infinite;
 }
 
+@keyframes station-warning {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(245 158 11 / 0), 0 0 28px -8px rgb(245 158 11 / 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgb(245 158 11 / 0.4), 0 0 44px -4px rgb(245 158 11 / 0.85);
+  }
+}
+
+.station-warning {
+  animation: station-warning 1.6s ease-in-out infinite;
+}
+
 /* subtle floor grid behind the station cards */
 .room-floor {
   background-image:
@@ -66,7 +80,8 @@ input[type='date']::-webkit-calendar-picker-indicator {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .station-critical {
+  .station-critical,
+  .station-warning {
     animation: none;
   }
 }

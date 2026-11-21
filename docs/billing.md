@@ -61,7 +61,7 @@ last_billed_at = last_billed_at + elapsed * 1000                  // ms-ის �
 | სცენარ | ქცევ | `end_reason` |
 |---|---|---|
 | Heartbeat, ბალანს > 0 | charge up to now | — |
-| Heartbeat, ბალანს ≤ `LOW_BALANCE_THRESHOLD_SECONDS` (300) | `LOW_BALANCE` ალერტი (ერთხელ სესიაზ, `low_balance_alerted`) | — |
+| Heartbeat / web sweep, ბალანსი ≤ `LOW_BALANCE_EARLY_SECONDS` (600) და ≤ `LOW_BALANCE_THRESHOLD_SECONDS` (300) | ორი `LOW_BALANCE` ალერტი (10 წთ, 5 წთ; თითო ერთხელ სესიაზე, `early_warning_alerted` / `low_balance_alerted`, `alerts.seconds_left`). თუ ბალანსი პირდაპირ < 5 წთ-ზე ჩამოვიდა, 10 წთ-იანი გამოტოვებულია. ვები დამატებით ლოკალური countdown-ით ზუსტ მომენტში აჩვენებს toast-ს, ხმას, OS შეტყობინებას და ციმციმა ტაბის სათაურს | — |
 | Heartbeat, ბალანს → 0 | სესია ხურავს, `BALANCE_DEPLETED` ალერტ | `BALANCE_DEPLETED` |
 | მომხმარებელ დააჭირა „გამოსვლ“ | charge up to now | `LOGOUT` (ან `BALANCE_DEPLETED` თუ ზუსტ 0 დარჩ) |
 | კლიენტის countdown = 0 → `logout(EXPIRED)` | charge up to now; თუ დარჩა ≤ 60 წმ (საათების სხვაობ) — ჩამოიჭრებ **ყველ** | `BALANCE_DEPLETED` |
@@ -73,6 +73,12 @@ last_billed_at = last_billed_at + elapsed * 1000                  // ms-ის �
 | ადმინი: PC → `LOGOUT` / `SHUTDOWN` | სესია ხურავს **მომენტალურ**; ბრძანებ მიდის PC-ზე მომდევნო heartbeat-ზ (ერთხელ) | `ADMIN_FORCED` |
 | ადმინი დეაქტივირებს მომხმარებლ | აქტიური სესია ხურავს | `ADMIN_FORCED` |
 | ადმინი სესიის დროს ბალანს ცვლდ | შემდეგ heartbeat ახლ ბალანსით ითვლ; 0 → `BALANCE_DEPLETED` | — |
+| ადმინი: დეშბორდზე მომხმარებლის არჩევა → „სტარტი“ (`POST /pcs/:id/session`) | PC შეიძლება გამორთულიც იყოს. სესია იქმნება `web_managed = true`, ჩამოჭრა იწყება **მაშინვე**. heartbeat არ მოდის, ამიტომ სერვერი თვითონ ჭრის ყოველ 30 წმ-ში (`billWebSessions`, LOW_BALANCE / BALANCE_DEPLETED როგორც heartbeat-ზე); timeout არ ხდება | — / `BALANCE_DEPLETED` |
+| იმავე PC-ზე უსაქმო კიოსკი (`acceptSession: true`) | იღებს `sessionToken`-ს, `web_managed = false`; შემდეგ ჩვეულებრივი heartbeat/timeout წესები | — |
+| ადმინი: „პაუზა“ (`POST /pcs/:id/session/pause`) | charge up to now, `paused_at = now`; სანამ `paused_at` დაყენებულია, ჩამოჭრა = 0. კიოსკი ბლოკავს ეკრანს მომდევნო heartbeat-ზე (≤ 60 წმ) | — |
+| ადმინი: „სტარტი“ პაუზის შემდეგ (`/resume`) | `paused_at = null`, `last_billed_at = now` — ჩამოჭრა მაშინვე გრძელდება | — |
+| ადმინი: web-სესიის დასრულება (LOGOUT) | სესია იხურება, PC-ზე ბრძანება **არ** რჩება რიგში | `ADMIN_FORCED` |
+| პაუზაზე მყოფი სესიის დასრულება (logout / timeout / admin) | დაპაუზებული დრო არ ჩამოიჭრება | შესაბამისი |
 
 ## რატომ არა სოკეტ
 

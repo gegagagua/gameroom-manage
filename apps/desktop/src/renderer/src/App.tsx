@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppState } from './hooks';
 import { useT } from './i18n';
 import { MiniWidget } from './screens/MiniWidget';
-import { ExpiredOverlay, MessageOverlay, NoticeToast, WarningToast } from './screens/Overlays';
+import { ExpiredOverlay, MessageOverlay, NoticeToast, PausedOverlay, WarningToast } from './screens/Overlays';
 import { LoginScreen } from './screens/LoginScreen';
 import { SessionScreen } from './screens/SessionScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -25,7 +25,7 @@ export function App() {
     document.documentElement.lang = lang;
   }, [lang]);
 
-  const mini = state?.windowMode === 'mini' && state.phase === 'active';
+  const mini = state?.windowMode === 'mini' && state.phase === 'active' && !state.paused;
   useEffect(() => {
     // the mini widget uses a fixed 16px base instead of the viewport-scaled one
     document.documentElement.classList.toggle('mini-mode', mini);
@@ -40,7 +40,7 @@ export function App() {
   }
 
   // While a game runs the same window is a small always-on-top countdown bar.
-  if (state.windowMode === 'mini' && state.phase === 'active') {
+  if (state.windowMode === 'mini' && state.phase === 'active' && !state.paused) {
     return <MiniWidget state={state} t={t} />;
   }
 
@@ -67,6 +67,7 @@ export function App() {
         <LoginScreen state={state} t={t} onOpenSettings={() => setSettingsOpen(true)} />
       )}
 
+      {state.phase === 'active' && state.paused && <PausedOverlay state={state} t={t} />}
       {state.phase === 'expired' && <ExpiredOverlay state={state} t={t} />}
       {state.phase === 'message' && !showSettings && <MessageOverlay state={state} t={t} />}
       {state.phase === 'active' && state.warning && <WarningToast warning={state.warning} t={t} />}

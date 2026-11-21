@@ -1,10 +1,9 @@
 import type { AppState } from '../../../common/ipc';
 import { useNow } from '../hooks';
-import type { Translate } from '../i18n';
+import { formatClockTime, formatShortDate, type Translate } from '../i18n';
 
 export function TopBar({ state, t }: { state: AppState; t: Translate }) {
   const now = useNow(1000);
-  const locale = state.config.language === 'ka' ? 'ka-GE' : 'en-GB';
   const pcLabel = state.pc.number ? t('pc.label', { n: state.pc.number }) : t('pc.unassigned');
 
   return (
@@ -23,8 +22,8 @@ export function TopBar({ state, t }: { state: AppState; t: Translate }) {
         </span>
       </div>
       <div className="topbar-clock">
-        <strong>{new Date(now).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}</strong>
-        <small>{new Date(now).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' })}</small>
+        <strong>{formatClockTime(new Date(now))}</strong>
+        <small>{formatShortDate(new Date(now), state.config.language)}</small>
       </div>
     </header>
   );

@@ -8,6 +8,7 @@ export function LoginScreen({ state, t, onOpenSettings }: { state: AppState; t: 
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exitOpen, setExitOpen] = useState(false);
   const loginRef = useRef<HTMLInputElement>(null);
 
   // Wipe credentials whenever the screen returns to the lock state.
@@ -79,10 +80,65 @@ export function LoginScreen({ state, t, onOpenSettings }: { state: AppState; t: 
           v{state.appVersion}
           {state.isDev ? ' · DEV' : ''}
         </span>
-        <button className="icon-btn" type="button" title={t('login.settings')} onClick={onOpenSettings}>
-          ⚙
-        </button>
+        <div className="footer-actions">
+          <button className="btn ghost exit-btn" type="button" onClick={() => setExitOpen(true)}>
+            ⏻ {t('exit.button')}
+          </button>
+          <button className="icon-btn" type="button" title={t('login.settings')} onClick={onOpenSettings}>
+            ⚙
+          </button>
+        </div>
       </footer>
+
+      {exitOpen && <ExitDialog state={state} t={t} onClose={() => setExitOpen(false)} />}
+    </div>
+  );
+}
+
+/** Admin password prompt that closes the kiosk app. */
+function ExitDialog({ state, t, onClose }: { state: AppState; t: Translate; onClose: () => void }) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy || !password) return;
+    setBusy(true);
+    setError(null);
+    const result = await window.grm.exitApp(password);
+    setBusy(false);
+    if (!result.ok) {
+      setPassword('');
+      setError(errorText(result.code, state.config.language));
+    }
+  };
+
+  return (
+    <div className="overlay exit-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form className="panel login-card" onSubmit={submit}>
+        <h2 className="glow-title">⏻ {t('exit.title')}</h2>
+        <p className="muted">{t('exit.hint')}</p>
+        <label className="field">
+          <span>{t('exit.password')}</span>
+          <input type="password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} disabled={busy} />
+        </label>
+        {error && <div className="alert error">{error}</div>}
+        <div className="dialog-actions">
+          <button className="btn ghost" type="button" onClick={onClose} disabled={busy}>
+            {t('exit.cancel')}
+          </button>
+          <button className="btn danger" type="submit" disabled={busy || !password}>
+            {t('exit.confirm')}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

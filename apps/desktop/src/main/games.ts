@@ -94,6 +94,40 @@ export async function launchGame(game: DesktopGame): Promise<LaunchResult> {
   }
 }
 
+export const DISCORD_PROCESS = 'Discord.exe';
+
+/**
+ * Starts Discord via its per-user updater (%LOCALAPPDATA%\Discord\Update.exe — the standard install).
+ * Not installed → opens Discord in the browser instead.
+ */
+export async function launchDiscord(): Promise<LaunchResult> {
+  const localAppData = process.env.LOCALAPPDATA;
+  const updater = localAppData ? join(localAppData, 'Discord', 'Update.exe') : null;
+  const describe = updater && existsSync(updater) ? `spawn ${updater} --processStart ${DISCORD_PROCESS}` : 'open https://discord.com/app';
+
+  if (isLaunchDryRun()) {
+    console.warn(`[games] DRY-RUN launch "Discord" — would ${describe}`);
+    return { ok: true, dryRun: true };
+  }
+  try {
+    if (updater && existsSync(updater)) {
+      const child = spawn(updater, ['--processStart', DISCORD_PROCESS], { detached: true, stdio: 'ignore', cwd: dirname(updater) });
+      await new Promise<void>((resolve, reject) => {
+        child.once('spawn', () => resolve());
+        child.once('error', reject);
+      });
+      child.unref();
+    } else {
+      await shell.openExternal('https://discord.com/app');
+    }
+    console.log(`[games] launched "Discord" (${describe})`);
+    return { ok: true, dryRun: false };
+  } catch (err) {
+    console.error(`[games] launch "Discord" failed: ${(err as Error).message}`);
+    return { ok: false, code: 'GAME_LAUNCH_FAILED' };
+  }
+}
+
 type Plan =
   | { kind: 'open'; target: string; describe: string }
   | { kind: 'exe'; exePath: string; args: string[]; describe: string };

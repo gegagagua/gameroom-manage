@@ -42,6 +42,9 @@ describe('Game Room API (e2e)', () => {
       if (token) r.set('Authorization', `Bearer ${token}`);
       return r.send({ pcNumber, appVersion: 'test' });
     },
+    /** idle kiosk heartbeat that may take over a web-started session */
+    idle: (pcNumber: number) =>
+      http().post('/api/desktop/heartbeat').set('x-pc-key', PC_KEY).send({ pcNumber, appVersion: 'test', acceptSession: true }),
     login: (pcNumber: number, login: string, password: string) =>
       http().post('/api/desktop/login').set('x-pc-key', PC_KEY).send({ pcNumber, login, password }),
     logout: (pcNumber: number, token: string, reason: 'USER' | 'EXPIRED' = 'USER') =>
@@ -336,6 +339,139 @@ describe('Game Room API (e2e)', () => {
       expect(hb.body.session).toMatchObject({ status: 'ENDED', endReason: 'ADMIN_FORCED', balanceSeconds: 3590 });
       const hb2 = await desktop.heartbeat(9).expect(200);
       expect(hb2.body.command).toBeNull();
+    });
+
+    describe('admin start / pause / resume from the web', () => {
+      /** End whatever runs on the PC and make it online + idle. */
+      const freshPc = async (n: number) => {
+        const pc = await prisma.pc.findUniqueOrThrow({ where: { number: n } });
+        await admin.post(`/api/pcs/${pc.id}/command`).send({ command: 'LOGOUT' }).expect(200);
+        await desktop.heartbeat(n).expect(200); // delivers (and clears) the command
+        return pc;
+      };
+
+      it('starts a session from the web on an offline PC: billed by the server, ended at 0', async () => {
+        const pc = await freshPc(4);
+        clock.advance(200); // PC is offline now — still allowed
+        const u = await createUser({ balanceHours: 0.1 }); // 360 s
+        await admin.post(`/api/pcs/${pc.id}/session`).send({ userId: u.id }).expect(200);
+
+        let row = (await admin.get('/api/pcs').expect(200)).body.items.find((p: { id: number }) => p.id === pc.id);
+        expect(row.currentSession).toMatchObject({ paused: false, webManaged: true, user: { id: u.id } });
+
+        // busy PC / same user elsewhere are refused
+        const u2 = await createUser();
+        expect((await admin.post(`/api/pcs/${pc.id}/session`).send({ userId: u2.id }).expect(409)).body.code).toBe('PC_BUSY');
+        const pc5 = await prisma.pc.findUniqueOrThrow({ where: { number: 5 } });
+        expect((await admin.post(`/api/pcs/${pc5.id}/session`).send({ userId: u.id }).expect(409)).body.code).toBe(
+          'ALREADY_LOGGED_IN_ELSEWHERE',
+        );
+
+        clock.advance(100);
+        await billing.billWebSessions();
+        await billing.closeStaleSessions(); // never times out a web session
+        expect(await balanceOf(u.id)).toBe(260);
+        expect(await prisma.alert.count({ where: { userId: u.id, type: 'LOW_BALANCE' } })).toBe(1);
+
+        clock.advance(300);
+        await billing.billWebSessions();
+        expect(await balanceOf(u.id)).toBe(0);
+        const s = await prisma.session.findFirstOrThrow({ where: { userId: u.id } });
+        expect(s).toMatchObject({ status: 'ENDED', endReason: 'BALANCE_DEPLETED', consumedSeconds: 360 });
+        row = (await admin.get('/api/pcs').expect(200)).body.items.find((p: { id: number }) => p.id === pc.id);
+        expect(row.currentSession).toBeNull();
+      });
+
+      it('an idle kiosk takes over a running web session', async () => {
+        const pc = await freshPc(10);
+        const u = await createUser({ balanceHours: 1 });
+        await admin.post(`/api/pcs/${pc.id}/session`).send({ userId: u.id }).expect(200);
+        clock.advance(40);
+        const hb = await desktop.idle(10).expect(200);
+        expect(hb.body.sessionToken).toEqual(expect.any(String));
+        expect(hb.body.session).toMatchObject({ status: 'ACTIVE', paused: false, balanceSeconds: 3560 });
+        expect((await desktop.idle(10).expect(200)).body.sessionToken).toBeNull();
+
+        clock.advance(60);
+        const hb2 = await desktop.heartbeat(10, hb.body.sessionToken).expect(200);
+        expect(hb2.body.session).toMatchObject({ balanceSeconds: 3500 });
+        const row = (await admin.get('/api/pcs').expect(200)).body.items.find((p: { id: number }) => p.id === pc.id);
+        expect(row.currentSession).toMatchObject({ webManaged: false });
+        await desktop.logout(10, hb.body.sessionToken).expect(200);
+      });
+
+      it('pause stops billing immediately; start resumes it immediately', async () => {
+        const pc = await freshPc(6);
+        const u = await createUser({ balanceHours: 1 });
+        const { body } = await desktop.login(6, u.email, 'secret1').expect(200);
+
+        clock.advance(30);
+        expect((await admin.post(`/api/pcs/${pc.id}/session/pause`).expect(200)).body).toMatchObject({ paused: true });
+        expect(await balanceOf(u.id)).toBe(3570);
+
+        clock.advance(600);
+        const hb = await desktop.heartbeat(6, body.sessionToken).expect(200);
+        expect(hb.body.session).toMatchObject({ status: 'ACTIVE', paused: true, balanceSeconds: 3570 });
+
+        clock.advance(20);
+        expect((await admin.post(`/api/pcs/${pc.id}/session/resume`).expect(200)).body).toMatchObject({ paused: false });
+        clock.advance(60);
+        const hb2 = await desktop.heartbeat(6, body.sessionToken).expect(200);
+        expect(hb2.body.session).toMatchObject({ paused: false, balanceSeconds: 3510 });
+
+        // paused time is never charged, even at the end
+        await admin.post(`/api/pcs/${pc.id}/session/pause`).expect(200);
+        clock.advance(300);
+        const out = await desktop.logout(6, body.sessionToken).expect(200);
+        expect(out.body.session).toMatchObject({ status: 'ENDED', endReason: 'LOGOUT', balanceSeconds: 3510 });
+        const tx = await prisma.balanceTransaction.findUniqueOrThrow({ where: { sessionId: body.session.id } });
+        expect(tx.amountSeconds).toBe(-90);
+
+        expect((await admin.post(`/api/pcs/${pc.id}/session/pause`).expect(409)).body.code).toBe('NO_ACTIVE_SESSION');
+      });
+
+      it('ending a web session does not queue a LOGOUT for the PC', async () => {
+        const pc = await freshPc(8);
+        const u = await createUser({ balanceHours: 1 });
+        await admin.post(`/api/pcs/${pc.id}/session`).send({ userId: u.id }).expect(200);
+        clock.advance(120);
+        const res = await admin.post(`/api/pcs/${pc.id}/command`).send({ command: 'LOGOUT' }).expect(200);
+        expect(res.body.endedSessionId).toEqual(expect.any(Number));
+        expect((await prisma.pc.findUniqueOrThrow({ where: { id: pc.id } })).pendingCommand).toBeNull();
+        expect(await balanceOf(u.id)).toBe(3480);
+      });
+    });
+
+    it('warns twice: 10 min, then 5 min — once each; a jump below 5 min skips the 10 min one', async () => {
+      const u = await createUser({ balanceHours: 0.25 }); // 900 s
+      const { body } = await desktop.login(7, u.email, 'secret1').expect(200);
+      const lows = () =>
+        prisma.alert.findMany({ where: { userId: u.id, type: 'LOW_BALANCE' }, orderBy: { id: 'asc' } });
+
+      clock.advance(200);
+      await desktop.heartbeat(7, body.sessionToken).expect(200); // 700 left
+      expect(await lows()).toHaveLength(0);
+      clock.advance(150);
+      await desktop.heartbeat(7, body.sessionToken).expect(200); // 550 left
+      clock.advance(60);
+      await desktop.heartbeat(7, body.sessionToken).expect(200); // 490 left — no repeat
+      expect((await lows()).map((a) => a.secondsLeft)).toEqual([550]);
+      clock.advance(200);
+      await desktop.heartbeat(7, body.sessionToken).expect(200); // 290 left
+      clock.advance(60);
+      await desktop.heartbeat(7, body.sessionToken).expect(200);
+      expect((await lows()).map((a) => a.secondsLeft)).toEqual([550, 290]);
+      const listed = await admin.get('/api/alerts').query({ status: 'open' }).expect(200);
+      expect(listed.body.items.find((a: { userId?: number; secondsLeft: number }) => a.secondsLeft === 290)).toBeTruthy();
+      await desktop.logout(7, body.sessionToken).expect(200);
+
+      const v = await createUser({ balanceHours: 0.1 }); // 360 s
+      const second = await desktop.login(7, v.email, 'secret1').expect(200);
+      clock.advance(100);
+      await desktop.heartbeat(7, second.body.sessionToken).expect(200); // 260 left
+      const vs = await prisma.alert.findMany({ where: { userId: v.id, type: 'LOW_BALANCE' } });
+      expect(vs.map((a) => a.secondsLeft)).toEqual([260]);
+      await desktop.logout(7, second.body.sessionToken).expect(200);
     });
 
     it('cannot delete a user with an active session', async () => {

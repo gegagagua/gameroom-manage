@@ -1,4 +1,4 @@
-import { endReasonLabels } from '@grm/shared';
+import { endReasonLabels, formatClock } from '@grm/shared';
 import { useEffect } from 'react';
 import type { AppState } from '../../../common/ipc';
 import { beep, useNow } from '../hooks';
@@ -26,6 +26,26 @@ export function ExpiredOverlay({ state, t }: { state: AppState; t: Translate }) 
         <div className="overlay-count">{s}</div>
         <p className="overlay-text">{expired.willShutdown ? t('expired.shutdownIn', { s }) : t('expired.lockIn', { s })}</p>
         {expired.willShutdown && expired.dryRun && <p className="muted small">{t('expired.dryRun')}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Admin paused the session from the web: the kiosk is locked and the countdown frozen. */
+export function PausedOverlay({ state, t }: { state: AppState; t: Translate }) {
+  useEffect(() => {
+    beep(2, 520);
+  }, []);
+
+  return (
+    <div className="overlay paused">
+      <div className="overlay-card">
+        <div className="overlay-icon">⏸</div>
+        <h1 className="overlay-title">{t('paused.title')}</h1>
+        <p className="overlay-text">{t('paused.subtitle')}</p>
+        <p className="muted small">{t('paused.remaining')}</p>
+        <div className="overlay-count mono">{formatClock(state.balanceSeconds)}</div>
+        {state.user && <p className="overlay-text">{state.user.name}</p>}
       </div>
     </div>
   );
