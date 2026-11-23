@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/format';
+import { useI18n } from '@/lib/i18n';
 
 export type ToastKind = 'success' | 'error' | 'warning' | 'info';
 
@@ -32,6 +33,7 @@ const kindClasses: Record<ToastKind, string> = {
 const kindIcon: Record<ToastKind, string> = { success: '✓', error: '⛔', warning: '⚠', info: 'ℹ' };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const closeLabel = useI18n().t('common.close');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
 
@@ -71,7 +73,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <div className="text-sm font-semibold">{t.title}</div>
               {t.body && <div className="mt-0.5 text-sm opacity-90">{t.body}</div>}
             </div>
-            <button onClick={() => dismiss(t.id)} className="self-start text-xs opacity-60 hover:opacity-100" aria-label="dismiss">
+            <button onClick={() => dismiss(t.id)} className="self-start text-xs opacity-60 hover:opacity-100" aria-label={closeLabel}>
               ✕
             </button>
           </div>

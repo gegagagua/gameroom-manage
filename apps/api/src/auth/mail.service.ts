@@ -15,11 +15,13 @@ export class MailService {
   }
 
   async sendPasswordReset(to: string, name: string, link: string) {
-    const subject = 'პაროლის აღდგენა / Password reset';
+    const subject = 'პაროლის აღდგენა / Password reset / Восстановление пароля';
     const text =
       `გამარჯობა ${name},\n\nპაროლის აღსადგენად გადადით ბმულზე (ვალიდურია 1 საათ):\n${link}\n\n` +
       `Hello ${name},\n\nTo reset your password open this link (valid for 1 hour):\n${link}\n\n` +
-      `If you did not request this, ignore this email.`;
+      `If you did not request this, ignore this email.\n\n` +
+      `Здравствуйте, ${name}!\n\nЧтобы восстановить пароль, перейдите по ссылке (действует 1 час):\n${link}\n\n` +
+      `Если вы этого не запрашивали, проигнорируйте это письмо.`;
 
     if (!this.transporter) {
       this.logger.warn(`SMTP not configured — password reset link for ${to}: ${link}`);

@@ -1,6 +1,6 @@
-import { secondsToHours, type Lang } from '@grm/shared';
+import { hourUnit, secondsToHours, type Lang } from '@grm/shared';
 
-const locale = (lang: Lang) => (lang === 'ka' ? 'ka-GE' : 'en-GB');
+const locale = (lang: Lang) => ({ ka: 'ka-GE', en: 'en-GB', ru: 'ru-RU' })[lang];
 
 export const cn = (...classes: (string | false | null | undefined)[]) => classes.filter(Boolean).join(' ');
 
@@ -28,12 +28,15 @@ export function formatTime(iso: string | null | undefined, lang: Lang): string {
 
 const KA_WEEKDAYS = ['კვ', 'ორ', 'სმ', 'ოთ', 'პრ', 'პრ', 'შბ'];
 const KA_MONTHS = ['იან', 'თებ', 'მარ', 'აპრ', 'მაი', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
+const RU_WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+const RU_MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
 /** "2026-09-14" → "ორ, 14 სექ" / "Mon 14 Sept". Georgian is explicit: browsers often lack ka Intl data. */
 export function formatDateLabel(ymd: string, lang: Lang): string {
   const [y, m, d] = ymd.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   if (lang === 'ka') return `${KA_WEEKDAYS[date.getDay()]}, ${d} ${KA_MONTHS[m - 1]}`;
+  if (lang === 'ru') return `${RU_WEEKDAYS[date.getDay()]}, ${d} ${RU_MONTHS[m - 1]}`;
   return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', weekday: 'short' }).format(date);
 }
 
@@ -49,7 +52,7 @@ export function relativeTime(iso: string | null | undefined, lang: Lang, now = D
     return diffSec <= 0 ? `${value} ${units[unit]} წინ` : `${value} ${units[unit]} შემდეგ`;
   }
   const names = { s: 'second', m: 'minute', h: 'hour', d: 'day' } as const;
-  return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(diffSec < 0 ? -value : value, names[unit as keyof typeof names]);
+  return new Intl.RelativeTimeFormat(lang, { numeric: 'auto' }).format(diffSec < 0 ? -value : value, names[unit as keyof typeof names]);
 }
 
 /** Local calendar date as YYYY-MM-DD (for <input type="date">). */
@@ -59,7 +62,7 @@ export function toYmd(d: Date): string {
 
 /** 5400 → "1.5 სთ" */
 export function hoursLabel(seconds: number, lang: Lang): string {
-  return `${secondsToHours(seconds)} ${lang === 'ka' ? 'სთ' : 'h'}`;
+  return `${secondsToHours(seconds)} ${hourUnit[lang]}`;
 }
 
 /** Parses "1,5" or "1.5" → 1.5; NaN if invalid. */

@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDuration, hoursToSeconds, type TransactionDto, type UserDto } from '@grm/shared';
+import { hourUnit, formatDuration, hoursToSeconds, type TransactionDto, type UserDto } from '@grm/shared';
 import { useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
 import { cn, parseHours } from '@/lib/format';
@@ -75,7 +75,7 @@ export function BalancePanel({ user, onDone, asCard = true }: { user: UserDto; o
               parsed === p ? 'border-violet-500 bg-violet-600/20 text-violet-100' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800',
             )}
           >
-            {p} {lang === 'ka' ? 'სთ' : 'h'}
+            {p} {hourUnit[lang]}
           </button>
         ))}
       </div>

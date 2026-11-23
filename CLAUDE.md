@@ -9,7 +9,7 @@ Internet cafe / game room management. Customers buy **time** (hours); PCs run a 
 | `apps/api` | REST API, billing, cron sweep | NestJS 11, Prisma 6, PostgreSQL |
 | `apps/web` | Admin panel + customer profile | Next.js 16 App Router, Tailwind 4, SWR |
 | `apps/desktop` | Full-screen kiosk client (customer only) | Electron + electron-vite + React |
-| `packages/shared` | TS types, error-code translations, time formatting, ka/en strings | TS source (no build) |
+| `packages/shared` | TS types, error-code translations, time formatting, ka/en/ru strings | TS source (no build) |
 | `docs/` | requirements, api, billing, architecture, desktop, deployment (Georgian) |
 
 Versions are deliberately pinned: NestJS 11 (12 is ESM-only), Prisma 6 (7+ requires driver adapters), TypeScript 5.9 (7 = native port, decorator metadata risk). Don't bump majors casually.
@@ -39,7 +39,7 @@ Dev admin: `admin@gameroom.local` / `Admin12345`; dev PC key: `dev-pc-key`.
 - Errors: throw `ApiError` with an `ErrorCode`; add new codes to `apps/api/src/common/api-error.ts` **and** translations in `packages/shared/src/i18n.ts`.
 - Admin-only routes: `@Roles('admin')`; public routes: `@Public()`; desktop routes: `@Public()` + `PcKeyGuard`.
 - Users are soft-deleted (email/phone rewritten to `deleted:<id>:...`).
-- UI text: Georgian default, English secondary — never hardcode strings in only one language.
+- UI text: Georgian default, plus English and Russian — never hardcode strings in only some languages. Russian lives in `apps/web/lib/messages.ru.ts` and `apps/desktop/src/renderer/src/i18n.ru.ts`.
 - Real PC shutdown is disabled in unpackaged dev builds (dry-run) — do not remove that guard; it would power off the developer machine.
 
 ## Project skills

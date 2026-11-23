@@ -1,6 +1,6 @@
 'use client';
 
-import { LANGS } from '@grm/shared';
+import { LANGS, langNames, langShortLabels } from '@grm/shared';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -24,9 +24,12 @@ export function LangSwitch() {
         <button
           key={l}
           onClick={() => setLang(l)}
+          title={langNames[l]}
+          aria-label={langNames[l]}
+          aria-pressed={lang === l}
           className={cn('rounded-md px-2 py-1 font-medium uppercase', lang === l ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white')}
         >
-          {l === 'ka' ? 'ქარ' : 'EN'}
+          {langShortLabels[l]}
         </button>
       ))}
     </div>

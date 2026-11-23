@@ -118,6 +118,19 @@ DesktopSessionState = { id, status, startedAt, endedAt, endReason, consumedSecon
 
 Login errors: `INVALID_CREDENTIALS` 401, `USER_INACTIVE` 403, `NO_BALANCE` 403, `ALREADY_LOGGED_IN_ELSEWHERE` 409 (`details.pcNumber`), `PC_NOT_FOUND` 404, `INVALID_PC_KEY` 401.
 
+## Bookings — `/bookings` (admin)
+
+სამუშაო დღე: 14:00 → 02:00 (`APP_TIMEZONE`). დრო ინახება წუთებად 14:00-დან (`0…720`, ბიჯი 30), ამიტომ 00:00–02:00 იმავე სამუშაო დღეს ეკუთვნის. მოწყობილობები: `PC-1…PC-10`, `SONY-1`, `SONY-2`.
+
+| Method | Path | Auth | Body / Query | Response |
+|---|---|---|---|---|
+| GET | `/bookings` | admin | `?date=YYYY-MM-DD` | `{ date, now: { date, minute }, items: BookingDto[] }` |
+| POST | `/bookings` | admin | `{ date, startMinute, endMinute, devices[], customerName, phone?, note? }` | `BookingDto` (201) |
+| PATCH | `/bookings/:id` | admin | partial | `BookingDto` |
+| DELETE | `/bookings/:id` | admin | — | `{ ok }` |
+
+Errors: `BOOKING_CONFLICT` 409 (`details.devices`), `BOOKING_INVALID_TIME` 400, `BOOKING_IN_PAST` 400, `BOOKING_NOT_FOUND` 404. გადაფარვის შემოწმება დღის advisory lock-ით სრულდება.
+
 ## Games — `/games` (admin) და `/desktop/games`
 
 | Method | Path | Auth | Body / Query | Response |

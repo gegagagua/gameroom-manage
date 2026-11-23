@@ -294,6 +294,7 @@ export function Modal({
   footer?: ReactNode;
   size?: 'sm' | 'md' | 'lg';
 }) {
+  const { t } = useI18n();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -309,7 +310,7 @@ export function Modal({
       <div className={cn('relative w-full rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl', widths[size])}>
         <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
           <h3 className="font-semibold text-white">{title}</h3>
-          <button onClick={onClose} className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white" aria-label="close">
+          <button onClick={onClose} className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white" aria-label={t('common.close')}>
             ✕
           </button>
         </div>

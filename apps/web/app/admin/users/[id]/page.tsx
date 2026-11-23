@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDuration, secondsToHours, type UserDetailDto } from '@grm/shared';
+import { hourUnit, formatDuration, secondsToHours, type UserDetailDto } from '@grm/shared';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -61,7 +61,7 @@ export default function UserDetailPage() {
             <StatCard
               label={t('common.balance')}
               value={formatDuration(user.balanceSeconds, lang)}
-              sub={`${secondsToHours(user.balanceSeconds)} ${lang === 'ka' ? 'სთ' : 'h'}`}
+              sub={`${secondsToHours(user.balanceSeconds)} ${hourUnit[lang]}`}
               tone={user.balanceSeconds > 0 ? 'green' : 'red'}
             />
             <StatCard label={t('user.stats.sessions')} value={user.stats.sessionsCount} />

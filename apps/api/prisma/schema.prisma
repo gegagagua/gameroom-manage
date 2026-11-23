@@ -215,3 +215,32 @@ model Game {
   @@index([isActive, sortOrder])
   @@map("games")
 }
+
+/// Reservation on one business day (14:00 → 02:00 in APP_TIMEZONE). Times are minutes since 14:00,
+/// so a booking after midnight still belongs to the day it opened on.
+model Booking {
+  id           Int             @id @default(autoincrement())
+  businessDate DateTime        @map("business_date") @db.Date
+  startMinute  Int             @map("start_minute")
+  endMinute    Int             @map("end_minute")
+  customerName String          @map("customer_name")
+  phone        String?
+  note         String?
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  devices      BookingDevice[]
+
+  @@index([businessDate])
+  @@map("bookings")
+}
+
+/// One reserved device of a booking: "PC-1" … "PC-10", "SONY-1", "SONY-2".
+model BookingDevice {
+  bookingId Int     @map("booking_id")
+  device    String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@id([bookingId, device])
+  @@index([device])
+  @@map("booking_devices")
+}

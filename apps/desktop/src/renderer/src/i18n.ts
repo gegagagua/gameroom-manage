@@ -1,5 +1,6 @@
 import { errorMessage, type Lang } from '@grm/shared';
 import { useCallback } from 'react';
+import { ru } from './i18n.ru';
 
 const ka = {
   brand: 'GAME ROOM',
@@ -219,7 +220,7 @@ const en: Record<Key, string> = {
   'error.GAME_LAUNCH_FAILED': 'Could not launch the game',
 };
 
-const dictionaries: Record<Lang, Record<Key, string>> = { ka, en };
+const dictionaries: Record<Lang, Record<Key, string>> = { ka, en, ru };
 
 export type Translate = (key: Key, vars?: Record<string, string | number>) => string;
 
@@ -244,8 +245,10 @@ export function errorText(code: string, lang: Lang, details?: unknown): string {
 
 const KA_WEEKDAYS = ['კვი', 'ორშ', 'სამ', 'ოთხ', 'ხუთ', 'პარ', 'შაბ'];
 const KA_MONTHS = ['იან', 'თებ', 'მარ', 'აპრ', 'მაი', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
+const RU_WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+const RU_MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
-/** 24-hour "HH:MM" — no AM/PM in either language. */
+/** 24-hour "HH:MM" — no AM/PM in any language. */
 export function formatClockTime(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
@@ -253,5 +256,6 @@ export function formatClockTime(date: Date): string {
 /** "პარ, 18 სექ" / "Fri 18 Sep". Built by hand: Electron's ICU may not have Georgian locale data. */
 export function formatShortDate(date: Date, lang: Lang): string {
   if (lang === 'ka') return `${KA_WEEKDAYS[date.getDay()]}, ${date.getDate()} ${KA_MONTHS[date.getMonth()]}`;
+  if (lang === 'ru') return `${RU_WEEKDAYS[date.getDay()]}, ${date.getDate()} ${RU_MONTHS[date.getMonth()]}`;
   return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }

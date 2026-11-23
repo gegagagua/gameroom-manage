@@ -1,6 +1,6 @@
 'use client';
 
-import { errorMessage, formatDuration, secondsToHours, type Paginated, type ReportSummary, type SessionDto } from '@grm/shared';
+import { hourUnit, errorMessage, formatDuration, secondsToHours, type Paginated, type ReportSummary, type SessionDto } from '@grm/shared';
 import Link from 'next/link';
 import { useState } from 'react';
 import useSWR from 'swr';
@@ -48,7 +48,7 @@ export default function ReportsPage() {
   const [exporting, setExporting] = useState(false);
   const valid = !!range.from && !!range.to && range.from <= range.to;
   const { data, error, isLoading } = useSWR<ReportSummary>(valid ? withQuery('/reports/summary', range) : null);
-  const h = lang === 'ka' ? 'სთ' : 'h';
+  const h = hourUnit[lang];
 
   const exportSessions = async () => {
     setExporting(true);

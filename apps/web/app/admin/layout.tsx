@@ -20,6 +20,7 @@ function AdminShell({ name, children }: { name: string; children: ReactNode }) {
         { href: '/admin', label: t('nav.dashboard'), exact: true },
         { href: '/admin/users', label: t('nav.users') },
         { href: '/admin/pcs', label: t('nav.pcs') },
+        { href: '/admin/bookings', label: t('nav.bookings') },
         { href: '/admin/games', label: t('nav.games') },
         { href: '/admin/reports', label: t('nav.reports') },
         { href: '/admin/alerts', label: t('nav.alerts'), badge: alerts?.openCount },

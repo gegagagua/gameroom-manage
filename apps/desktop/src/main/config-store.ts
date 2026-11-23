@@ -35,7 +35,7 @@ export function validateConfig(c: DesktopConfig): string | null {
   if (!Number.isInteger(c.shutdownDelaySeconds) || c.shutdownDelaySeconds < 5 || c.shutdownDelaySeconds > 600) {
     return 'INVALID_SHUTDOWN_DELAY';
   }
-  if (c.language !== 'ka' && c.language !== 'en') return 'VALIDATION_FAILED';
+  if (c.language !== 'ka' && c.language !== 'en' && c.language !== 'ru') return 'VALIDATION_FAILED';
   return null;
 }
 

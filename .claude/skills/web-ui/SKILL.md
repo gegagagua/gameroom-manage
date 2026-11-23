@@ -24,7 +24,7 @@ Next.js 16 App Router, Tailwind 4, SWR. All pages are `'use client'`. Read `docs
 ## i18n
 
 - Every visible string goes through `const { t, lang, errText } = useI18n()`.
-- Add keys to **both** `ka` and `en` in `lib/messages.ts` (`en` is typed `Record<MessageKey, string>` — a missing key fails typecheck). Placeholders: `t('users.deleteConfirm', { name })`.
+- Add keys to `ka` and `en` in `lib/messages.ts` **and** `ru` in `lib/messages.ru.ts` (`en`/`ru` are typed `Record<MessageKey, string>` — a missing key fails typecheck). Placeholders: `t('users.deleteConfirm', { name })`.
 - Error display: `errText(err)` — maps API `code` via `errorMessage()` in `packages/shared/src/i18n.ts`. New API error codes need translations there.
 - Enum labels: `transactionTypeLabels`, `endReasonLabels`, `alertTypeLabels` from `@grm/shared`.
 

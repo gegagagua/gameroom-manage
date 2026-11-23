@@ -1,12 +1,13 @@
 'use client';
 
-import { errorMessage, type Lang } from '@grm/shared';
+import { errorMessage, isLang, type Lang } from '@grm/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ApiRequestError } from './api';
 import { en, ka, type MessageKey } from './messages';
+import { ru } from './messages.ru';
 
 const STORAGE_KEY = 'grm_lang';
-const dictionaries: Record<Lang, Record<MessageKey, string>> = { ka, en };
+const dictionaries: Record<Lang, Record<MessageKey, string>> = { ka, en, ru };
 
 interface I18nContextValue {
   lang: Lang;
@@ -24,7 +25,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === 'ka' || stored === 'en') setLangState(stored);
+      if (isLang(stored)) setLangState(stored);
     } catch {
       /* storage unavailable */
     }
@@ -56,7 +57,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     (err: unknown) => {
       if (err instanceof ApiRequestError) {
         const base = errorMessage(err.code, lang, err.message);
-        return err.code === 'VALIDATION_FAILED' && err.message ? `${base}: ${err.message}` : base;
+        // The API's validation detail is English-only, so other languages show just the translated text.
+        return lang === 'en' && err.code === 'VALIDATION_FAILED' && err.message ? `${base}: ${err.message}` : base;
       }
       return err instanceof Error ? err.message : String(err);
     },

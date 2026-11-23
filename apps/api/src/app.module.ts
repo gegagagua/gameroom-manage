@@ -6,6 +6,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AlertsModule } from './alerts/alerts.module';
 import { AuthModule } from './auth/auth.module';
+import { BookingsModule } from './bookings/bookings.module';
 import { AuthGuard } from './auth/auth.guard';
 import { Public } from './auth/decorators';
 import { ApiExceptionFilter } from './common/api-exception.filter';
@@ -48,6 +49,7 @@ class HealthController {
     PcsModule,
     ReportsModule,
     GamesModule,
+    BookingsModule,
   ],
   controllers: [HealthController],
   providers: [

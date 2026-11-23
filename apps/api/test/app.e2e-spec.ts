@@ -35,6 +35,7 @@ describe('Game Room API (e2e)', () => {
   let billing: BillingService;
   let admin: ReturnType<typeof request.agent>;
   let http: () => ReturnType<typeof request>;
+  let adminCookie: string;
 
   const desktop = {
     heartbeat: (pcNumber: number, token?: string) => {
@@ -100,6 +101,7 @@ describe('Game Room API (e2e)', () => {
       const res = await admin.post('/api/auth/admin/login').send({ email: 'admin@test.local', password: 'AdminPass1' });
       expect(res.status).toBe(200);
       expect(res.headers['set-cookie'][0]).toMatch(/grm_token=.*HttpOnly/);
+      adminCookie = res.headers['set-cookie'][0].split(';')[0];
       const me = await admin.get('/api/auth/me').expect(200);
       expect(me.body.role).toBe('admin');
     });
@@ -618,6 +620,68 @@ describe('Game Room API (e2e)', () => {
         .set('x-pc-key', PC_KEY)
         .set('Authorization', `Bearer ${body.sessionToken}`);
       expect(after.status).toBe(401);
+    });
+  });
+
+  describe('bookings', () => {
+    const date = '2027-01-15';
+    const book = (body: Record<string, unknown>) =>
+      admin.post('/api/bookings').send({ date, customerName: 'Nika', startMinute: 60, endMinute: 180, devices: ['PC-1'], ...body });
+
+    it('requires admin', async () => {
+      expect((await http().get('/api/bookings').query({ date })).status).toBe(401);
+    });
+
+    it('creates a multi-device booking and lists it on its day only', async () => {
+      const res = await book({ devices: ['PC-2', 'SONY-1'], phone: ' 555 ' }).expect(201);
+      expect(res.body).toMatchObject({ date, startMinute: 60, endMinute: 180, devices: ['PC-2', 'SONY-1'], phone: '555' });
+      const day = await admin.get('/api/bookings').query({ date }).expect(200);
+      expect(day.body.items.map((b: { id: number }) => b.id)).toContain(res.body.id);
+      const other = await admin.get('/api/bookings').query({ date: '2027-01-16' }).expect(200);
+      expect(other.body.items).toEqual([]);
+    });
+
+    it('rejects an overlap on any device but allows back-to-back and other devices', async () => {
+      await book({ devices: ['PC-3'] }).expect(201);
+      const clash = await book({ devices: ['PC-4', 'PC-3'], startMinute: 150, endMinute: 240 });
+      expect(clash.status).toBe(409);
+      expect(clash.body.code).toBe('BOOKING_CONFLICT');
+      expect(clash.body.details.devices).toEqual(['PC-3']);
+      await book({ devices: ['PC-3'], startMinute: 180, endMinute: 240 }).expect(201);
+      await book({ devices: ['PC-4'], startMinute: 150, endMinute: 240 }).expect(201);
+    });
+
+    it('never double-books under concurrent requests', async () => {
+      const results = await Promise.all(
+        [1, 2, 3, 4].map(() => http().post('/api/bookings').set('Cookie', adminCookie).send({
+          date: '2027-01-17', customerName: 'Race', startMinute: 0, endMinute: 60, devices: ['PC-5'],
+        })),
+      );
+      expect(results.map((r) => r.status).sort()).toEqual([201, 409, 409, 409]);
+    });
+
+    it('validates hours, step, devices and past dates', async () => {
+      expect((await book({ endMinute: 750 })).body.code).toBe('VALIDATION_FAILED');
+      expect((await book({ startMinute: 45 })).body.code).toBe('BOOKING_INVALID_TIME');
+      expect((await book({ startMinute: 180, endMinute: 180 })).body.code).toBe('BOOKING_INVALID_TIME');
+      expect((await book({ devices: ['PC-11'] })).body.code).toBe('VALIDATION_FAILED');
+      expect((await book({ date: '2027-02-31' })).body.code).toBe('BOOKING_INVALID_TIME');
+      expect((await book({ date: '2020-01-01' })).body.code).toBe('BOOKING_IN_PAST');
+    });
+
+    it('updates without clashing with itself, then deletes', async () => {
+      const { body } = await book({ devices: ['PC-6'] }).expect(201);
+      const moved = await admin.patch(`/api/bookings/${body.id}`).send({ endMinute: 240, devices: ['PC-6', 'PC-7'] }).expect(200);
+      expect(moved.body).toMatchObject({ startMinute: 60, endMinute: 240, devices: ['PC-6', 'PC-7'] });
+      await admin.delete(`/api/bookings/${body.id}`).expect(200);
+      expect((await admin.delete(`/api/bookings/${body.id}`)).body.code).toBe('BOOKING_NOT_FOUND');
+    });
+
+    it('counts 01:00 as the previous business day', async () => {
+      const target = new Date('2027-02-01T21:00:00.000Z').getTime(); // 01:00 on Feb 2 in Tbilisi
+      clock.advance((target - clock.now().getTime()) / 1000);
+      const res = await admin.get('/api/bookings').query({ date: '2027-02-01' }).expect(200);
+      expect(res.body.now).toEqual({ date: '2027-02-01', minute: 660 });
     });
   });
 });

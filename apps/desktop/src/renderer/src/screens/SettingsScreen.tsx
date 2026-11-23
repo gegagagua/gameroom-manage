@@ -1,3 +1,4 @@
+import { LANGS, langNames } from '@grm/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import type { AppState, DesktopConfig, SettingsPayload } from '../../../common/ipc';
 import { errorText, type Translate } from '../i18n';
@@ -158,9 +159,9 @@ export function SettingsScreen({ state, t, onClose }: { state: AppState; t: Tran
           <div className="field">
             <span>{t('settings.language')}</span>
             <div className="segmented">
-              {(['ka', 'en'] as const).map((l) => (
+              {LANGS.map((l) => (
                 <button key={l} type="button" className={draft.language === l ? 'selected' : ''} onClick={() => update('language', l)}>
-                  {l === 'ka' ? 'ქართული' : 'English'}
+                  {langNames[l]}
                 </button>
               ))}
             </div>

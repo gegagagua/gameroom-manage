@@ -1,3 +1,5 @@
+import type { Lang } from './i18n';
+
 /** Balance is stored in seconds; UI shows hours. */
 export const hoursToSeconds = (hours: number) => Math.round(hours * 3600);
 export const secondsToHours = (seconds: number) => Math.round((seconds / 3600) * 100) / 100;
@@ -11,13 +13,17 @@ export function formatClock(totalSeconds: number): string {
   return [h, m, sec].map((n) => String(n).padStart(2, '0')).join(':');
 }
 
-/** 5400 → "1 სთ 30 წთ" / "1h 30m". Negative values keep the sign. */
-export function formatDuration(totalSeconds: number, lang: 'ka' | 'en' = 'ka'): string {
+/** 5400 → "1 სთ 30 წთ" / "1h 30m" / "1 ч 30 мин". Negative values keep the sign. */
+export function formatDuration(totalSeconds: number, lang: Lang = 'ka'): string {
   const sign = totalSeconds < 0 ? '-' : '';
   const s = Math.abs(Math.round(totalSeconds));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
-  const units = lang === 'ka' ? { h: ' სთ', m: ' წთ', s: ' წმ' } : { h: 'h', m: 'm', s: 's' };
+  const units = {
+    ka: { h: ' სთ', m: ' წთ', s: ' წმ' },
+    en: { h: 'h', m: 'm', s: 's' },
+    ru: { h: ' ч', m: ' мин', s: ' с' },
+  }[lang];
   if (h === 0 && m === 0) return `${sign}${s}${units.s}`;
   if (h === 0) return `${sign}${m}${units.m}`;
   return `${sign}${h}${units.h}${m ? ` ${m}${units.m}` : ''}`;
