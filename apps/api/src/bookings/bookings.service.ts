@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BookingStatus, Prisma } from '@prisma/client';
 import { ApiError, ErrorCode } from '../common/api-error';
 import { ClockService } from '../common/clock.service';
 import { PrismaService } from '../common/prisma.service';
 import { AppConfig } from '../config/app-config';
-import { CreateBookingDto, UpdateBookingDto } from './bookings.dto';
+import { CreateBookingDto, PublicBookingDto, UpdateBookingDto } from './bookings.dto';
 
 const OPEN_MINUTE = 14 * 60;
 const CLOSE_MINUTE = 2 * 60;
@@ -12,6 +12,11 @@ const DAY_MINUTES = 720;
 const STEP_MINUTES = 30;
 /** Advisory-lock namespace: bookings of one business day are checked and written one at a time. */
 const LOCK_NAMESPACE = 7301;
+/** Limits on the public form, so one visitor or bot cannot fill the calendar. */
+const PUBLIC_MAX_DAYS_AHEAD = 60;
+const PUBLIC_MAX_MINUTES = 360;
+const PUBLIC_MAX_PENDING_PER_PHONE = 3;
+const PUBLIC_MAX_PENDING_PER_DAY = 20;
 
 const withDevices = { devices: { orderBy: { device: 'asc' } } } satisfies Prisma.BookingInclude;
 type BookingRow = Prisma.BookingGetPayload<{ include: typeof withDevices }>;
@@ -37,6 +42,73 @@ export class BookingsService {
       orderBy: [{ startMinute: 'asc' }, { id: 'asc' }],
     });
     return { date, now: this.businessNow(), items: rows.map((r) => this.toDto(r)) };
+  }
+
+  async availability(date: string) {
+    const rows = await this.prisma.bookingDevice.findMany({
+      where: { booking: { businessDate: this.parseDate(date) } },
+      select: { device: true, booking: { select: { startMinute: true, endMinute: true } } },
+    });
+    return {
+      date,
+      now: this.businessNow(),
+      busy: rows
+        .map((r) => ({ device: r.device, startMinute: r.booking.startMinute, endMinute: r.booking.endMinute }))
+        .sort((a, b) => deviceOrder(a.device) - deviceOrder(b.device) || a.startMinute - b.startMinute),
+    };
+  }
+
+  async requestOnline(dto: PublicBookingDto) {
+    // A filled honeypot looks successful to the bot and stores nothing.
+    if (dto.website) return { ok: true };
+    this.assertTimes(dto.date, dto.startMinute, dto.endMinute);
+    const businessDate = this.parseDate(dto.date);
+    const latest = new Date(`${this.businessNow().date}T00:00:00.000Z`);
+    latest.setUTCDate(latest.getUTCDate() + PUBLIC_MAX_DAYS_AHEAD);
+    if (businessDate > latest || dto.endMinute - dto.startMinute > PUBLIC_MAX_MINUTES) {
+      throw ApiError.badRequest(ErrorCode.BOOKING_INVALID_TIME, 'Outside the online booking limits');
+    }
+    const phone = dto.phone.replace(/[\s()-]/g, '');
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockDay(tx, dto.date);
+      const [forPhone, forDay] = await Promise.all([
+        tx.booking.count({ where: { status: BookingStatus.PENDING, phone } }),
+        tx.booking.count({ where: { status: BookingStatus.PENDING, businessDate } }),
+      ]);
+      if (forPhone >= PUBLIC_MAX_PENDING_PER_PHONE || forDay >= PUBLIC_MAX_PENDING_PER_DAY) {
+        throw ApiError.conflict(ErrorCode.BOOKING_TOO_MANY, 'Too many unconfirmed bookings');
+      }
+      await this.assertFree(tx, businessDate, dto.startMinute, dto.endMinute, dto.devices);
+      await tx.booking.create({
+        data: {
+          businessDate,
+          startMinute: dto.startMinute,
+          endMinute: dto.endMinute,
+          customerName: dto.customerName,
+          phone,
+          note: dto.note || null,
+          status: BookingStatus.PENDING,
+          online: true,
+          devices: { create: dto.devices.map((device) => ({ device })) },
+        },
+      });
+    });
+    return { ok: true };
+  }
+
+  async pending() {
+    const rows = await this.prisma.booking.findMany({
+      where: { status: BookingStatus.PENDING, businessDate: { gte: new Date(`${this.businessNow().date}T00:00:00.000Z`) } },
+      include: withDevices,
+      orderBy: [{ businessDate: 'asc' }, { startMinute: 'asc' }, { id: 'asc' }],
+    });
+    return { items: rows.map((r) => this.toDto(r)) };
+  }
+
+  async confirm(id: number) {
+    const { count } = await this.prisma.booking.updateMany({ where: { id }, data: { status: BookingStatus.CONFIRMED } });
+    if (!count) throw ApiError.notFound(ErrorCode.BOOKING_NOT_FOUND, 'Booking not found');
+    return this.toDto(await this.prisma.booking.findUniqueOrThrow({ where: { id }, include: withDevices }));
   }
 
   async create(dto: CreateBookingDto) {
@@ -186,6 +258,8 @@ export class BookingsService {
       customerName: row.customerName,
       phone: row.phone,
       note: row.note,
+      status: row.status,
+      online: row.online,
     };
   }
 }

@@ -14,7 +14,7 @@ import {
 import { useState } from 'react';
 import useSWR from 'swr';
 import { useToast } from '@/components/toast';
-import { Button, ConfirmModal, FormError, Input, Modal, Select } from '@/components/ui';
+import { Badge, Button, ConfirmModal, FormError, Input, Modal, Select } from '@/components/ui';
 import { api, withQuery } from '@/lib/api';
 import { cn } from '@/lib/format';
 import { useI18n } from '@/lib/i18n';
@@ -87,6 +87,23 @@ export function BookingModal({ draft, onClose }: { draft: BookingDraft; onClose:
     onClose();
   };
 
+  const confirm = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/bookings/${existing!.id}/confirm`, { method: 'POST' });
+      await revalidate('/bookings');
+      toast.success(t('bookings.confirmed'));
+      onClose();
+    } catch (err) {
+      setError(errText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const isPending = existing?.status === 'PENDING';
+
   const chip = (device: string) => {
     const selected = devices.includes(device);
     const isBusy = taken.has(device);
@@ -120,19 +137,25 @@ export function BookingModal({ draft, onClose }: { draft: BookingDraft; onClose:
           <>
             {existing && (
               <Button variant="danger" className="mr-auto" onClick={() => setConfirmDelete(true)}>
-                {t('common.delete')}
+                {t(isPending ? 'bookings.reject' : 'common.delete')}
               </Button>
             )}
             <Button variant="secondary" onClick={onClose}>
               {t('common.cancel')}
             </Button>
-            <Button onClick={save} loading={busy}>
+            <Button variant={isPending ? 'secondary' : 'primary'} onClick={save} loading={busy}>
               {t('common.save')}
             </Button>
+            {isPending && (
+              <Button variant="warning" onClick={confirm} loading={busy}>
+                {t('bookings.confirm')}
+              </Button>
+            )}
           </>
         }
       >
         <div className="space-y-4">
+          {existing?.online && <Badge tone="amber">{t('bookings.onlineBadge')}</Badge>}
           <div className="grid grid-cols-3 gap-3">
             <Input label={t('bookings.date')} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             <Select label={t('bookings.from')} value={start} onChange={(e) => changeStart(Number(e.target.value))}>
@@ -174,12 +197,12 @@ export function BookingModal({ draft, onClose }: { draft: BookingDraft; onClose:
       {existing && (
         <ConfirmModal
           open={confirmDelete}
-          title={t('bookings.deleteTitle')}
+          title={t(isPending ? 'bookings.rejectTitle' : 'bookings.deleteTitle')}
           message={t('bookings.deleteConfirm', {
             name: existing.customerName,
             time: `${bookingClock(existing.startMinute)}–${bookingClock(existing.endMinute)}`,
           })}
-          confirmLabel={t('common.delete')}
+          confirmLabel={t(isPending ? 'bookings.reject' : 'common.delete')}
           onConfirm={remove}
           onClose={() => setConfirmDelete(false)}
         />

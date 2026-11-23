@@ -142,7 +142,7 @@ function DeviceRow({
               style={{ left: pct(b.startMinute), width: pct(b.endMinute - b.startMinute) }}
               className={cn(
                 'absolute inset-y-[3px] z-10 flex items-center gap-1.5 overflow-hidden rounded-md border px-1.5 text-left leading-none transition',
-                barTones[state],
+                b.status === 'PENDING' ? 'border-2 border-dashed border-amber-300 bg-amber-400/90 text-amber-950' : barTones[state],
                 hoveredId === b.id && 'ring-2 ring-white',
               )}
             >

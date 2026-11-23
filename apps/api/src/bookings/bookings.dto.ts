@@ -23,6 +23,50 @@ export class BookingsDayQuery {
   date!: string;
 }
 
+export class PublicBookingDto {
+  @Matches(DATE)
+  date!: string;
+
+  @IsInt()
+  @Min(0)
+  @Max(720)
+  startMinute!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(720)
+  endMinute!: number;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(12)
+  @ArrayUnique()
+  @Matches(DEVICE, { each: true })
+  devices!: string[];
+
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  customerName!: string;
+
+  @Transform(trim)
+  @Matches(/^\+?[\d\s()-]{6,24}$/)
+  phone!: string;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(300)
+  note?: string;
+
+  /** Honeypot: hidden from people, filled in by simple bots. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  website?: string;
+}
+
 export class UpdateBookingDto {
   @IsOptional()
   @Matches(DATE)

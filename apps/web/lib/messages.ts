@@ -307,6 +307,13 @@ export const ka = {
   'bookings.deleted': 'ჯავშანი წაიშალა',
   'bookings.deleteTitle': 'ჯავშნის წაშლა',
   'bookings.deleteConfirm': 'წავშალო {name}-ის ჯავშანი ({time})?',
+  'bookings.pendingTitle': 'ონლაინ მოთხოვნები ({n})',
+  'bookings.confirm': 'დადასტურება',
+  'bookings.reject': 'უარყოფა',
+  'bookings.confirmed': 'ჯავშანი დადასტურდა',
+  'bookings.rejectTitle': 'მოთხოვნის უარყოფა',
+  'bookings.legendPending': 'დასადასტურებელი',
+  'bookings.onlineBadge': 'ონლაინ მოთხოვნა',
 } as const;
 
 export type MessageKey = keyof typeof ka;
@@ -617,4 +624,11 @@ export const en: Record<MessageKey, string> = {
   'bookings.deleted': 'Booking deleted',
   'bookings.deleteTitle': 'Delete booking',
   'bookings.deleteConfirm': 'Delete the booking for {name} ({time})?',
+  'bookings.pendingTitle': 'Online requests ({n})',
+  'bookings.confirm': 'Confirm',
+  'bookings.reject': 'Reject',
+  'bookings.confirmed': 'Booking confirmed',
+  'bookings.rejectTitle': 'Reject request',
+  'bookings.legendPending': 'Awaiting confirmation',
+  'bookings.onlineBadge': 'Online request',
 };

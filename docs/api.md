@@ -127,9 +127,13 @@ Login errors: `INVALID_CREDENTIALS` 401, `USER_INACTIVE` 403, `NO_BALANCE` 403, 
 | GET | `/bookings` | admin | `?date=YYYY-MM-DD` | `{ date, now: { date, minute }, items: BookingDto[] }` |
 | POST | `/bookings` | admin | `{ date, startMinute, endMinute, devices[], customerName, phone?, note? }` | `BookingDto` (201) |
 | PATCH | `/bookings/:id` | admin | partial | `BookingDto` |
-| DELETE | `/bookings/:id` | admin | — | `{ ok }` |
+| DELETE | `/bookings/:id` | admin | — | `{ ok }` (ონლაინ მოთხოვნის უარყოფაც) |
+| GET | `/bookings/pending` | admin | — | `{ items: BookingDto[] }` — დასადასტურებელი ონლაინ ჯავშნები |
+| POST | `/bookings/:id/confirm` | admin | — | `BookingDto` |
+| GET | `/public/bookings/availability` | public | `?date=YYYY-MM-DD` | `{ date, now, busy: [{ device, startMinute, endMinute }] }` — კლიენტის მონაცემების გარეშე |
+| POST | `/public/bookings` | public, 5/წთ | `{ date, startMinute, endMinute, devices[], customerName, phone, note? }` | `{ ok }` — იქმნება `PENDING` და იკავებს დროს |
 
-Errors: `BOOKING_CONFLICT` 409 (`details.devices`), `BOOKING_INVALID_TIME` 400, `BOOKING_IN_PAST` 400, `BOOKING_NOT_FOUND` 404. გადაფარვის შემოწმება დღის advisory lock-ით სრულდება.
+Errors: `BOOKING_CONFLICT` 409 (`details.devices`), `BOOKING_INVALID_TIME` 400, `BOOKING_IN_PAST` 400, `BOOKING_NOT_FOUND` 404, `BOOKING_TOO_MANY` 409 (ერთ ტელეფონზე მაქს. 3, დღეში მაქს. 20 დაუდასტურებელი; ონლაინ ჯავშანი მაქს. 6 სთ და 60 დღით ადრე). გადაფარვის შემოწმება დღის advisory lock-ით სრულდება.
 
 ## Games — `/games` (admin) და `/desktop/games`
 

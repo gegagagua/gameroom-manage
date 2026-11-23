@@ -306,4 +306,11 @@ export const ru: Record<MessageKey, string> = {
   'bookings.deleted': 'Бронь удалена',
   'bookings.deleteTitle': 'Удаление брони',
   'bookings.deleteConfirm': 'Удалить бронь клиента {name} ({time})?',
+  'bookings.pendingTitle': 'Онлайн-заявки ({n})',
+  'bookings.confirm': 'Подтвердить',
+  'bookings.reject': 'Отклонить',
+  'bookings.confirmed': 'Бронь подтверждена',
+  'bookings.rejectTitle': 'Отклонение заявки',
+  'bookings.legendPending': 'Ждёт подтверждения',
+  'bookings.onlineBadge': 'Онлайн-заявка',
 };

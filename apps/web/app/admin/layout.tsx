@@ -1,16 +1,20 @@
 'use client';
 
+import type { BookingDto } from '@grm/shared';
 import type { ReactNode } from 'react';
+import useSWR from 'swr';
 import { AlertPoller, useOpenAlerts } from '@/components/alert-poller';
 import { AppShell } from '@/components/app-shell';
 import { useRequireRole } from '@/components/auth-gate';
 import { DesktopDownloadButton } from '@/components/desktop-download';
 import { Loading } from '@/components/ui';
 import { useI18n } from '@/lib/i18n';
+import { REFRESH_MS } from '@/lib/swr';
 
 function AdminShell({ name, children }: { name: string; children: ReactNode }) {
   const { t } = useI18n();
   const { data: alerts } = useOpenAlerts();
+  const { data: pending } = useSWR<{ items: BookingDto[] }>('/bookings/pending', { refreshInterval: REFRESH_MS });
   return (
     <AppShell
       userName={name}
@@ -20,7 +24,7 @@ function AdminShell({ name, children }: { name: string; children: ReactNode }) {
         { href: '/admin', label: t('nav.dashboard'), exact: true },
         { href: '/admin/users', label: t('nav.users') },
         { href: '/admin/pcs', label: t('nav.pcs') },
-        { href: '/admin/bookings', label: t('nav.bookings') },
+        { href: '/admin/bookings', label: t('nav.bookings'), badge: pending?.items.length },
         { href: '/admin/games', label: t('nav.games') },
         { href: '/admin/reports', label: t('nav.reports') },
         { href: '/admin/alerts', label: t('nav.alerts'), badge: alerts?.openCount },

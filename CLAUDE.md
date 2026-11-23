@@ -8,6 +8,7 @@ Internet cafe / game room management. Customers buy **time** (hours); PCs run a 
 |---|---|---|
 | `apps/api` | REST API, billing, cron sweep | NestJS 11, Prisma 6, PostgreSQL |
 | `apps/web` | Admin panel + customer profile | Next.js 16 App Router, Tailwind 4, SWR |
+| `apps/landing` | Public marketing site + player booking (5 languages). Independent of `apps/web`; talks only to `/api/public/*` | Next.js 16 App Router, plain CSS |
 | `apps/desktop` | Full-screen kiosk client (customer only) | Electron + electron-vite + React |
 | `packages/shared` | TS types, error-code translations, time formatting, ka/en/ru strings | TS source (no build) |
 | `docs/` | requirements, api, billing, architecture, desktop, deployment (Georgian) |
@@ -19,6 +20,7 @@ Versions are deliberately pinned: NestJS 11 (12 is ESM-only), Prisma 6 (7+ requi
 ```bash
 npm run dev:api          # API on :4000 (nest --watch)
 npm run dev:web          # web on :3000 (proxies /api → API_URL)
+npm run dev:landing      # landing on :3001 (proxies only /api/public → API_URL)
 npm run dev:desktop      # Electron kiosk (dev = windowed, shutdown dry-run)
 npm test                 # API e2e suite (resets game_room_test DB)
 npm run typecheck        # all workspaces

@@ -46,6 +46,7 @@ export const errorMessages: Record<Lang, Record<string, string>> = {
     BOOKING_CONFLICT: 'ამ დროს მოწყობილობა უკვე დაჯავშნილია',
     BOOKING_INVALID_TIME: 'დრო არასწორია: 14:00–02:00, 30-წუთიანი ბიჯით',
     BOOKING_IN_PAST: 'წარსულ დროზე ჯავშნის გაკეთება შეუძლებელია',
+    BOOKING_TOO_MANY: 'ძალიან ბევრი დაუდასტურებელი ჯავშანია — დაგვიკავშირდით',
   },
   en: {
     VALIDATION_FAILED: 'Invalid input',
@@ -80,6 +81,7 @@ export const errorMessages: Record<Lang, Record<string, string>> = {
     BOOKING_CONFLICT: 'A device is already booked at this time',
     BOOKING_INVALID_TIME: 'Invalid time: 14:00–02:00 in 30-minute steps',
     BOOKING_IN_PAST: 'Cannot book a time in the past',
+    BOOKING_TOO_MANY: 'Too many unconfirmed bookings — please contact us',
   },
   ru: {
     VALIDATION_FAILED: 'Введены неверные данные',
@@ -114,6 +116,7 @@ export const errorMessages: Record<Lang, Record<string, string>> = {
     BOOKING_CONFLICT: 'Устройство в это время уже забронировано',
     BOOKING_INVALID_TIME: 'Неверное время: 14:00–02:00, шаг 30 минут',
     BOOKING_IN_PAST: 'Нельзя забронировать прошедшее время',
+    BOOKING_TOO_MANY: 'Слишком много неподтверждённых броней — свяжитесь с нами',
   },
 };
 

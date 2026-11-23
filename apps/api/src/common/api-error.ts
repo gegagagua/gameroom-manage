@@ -42,6 +42,7 @@ export const ErrorCode = {
   BOOKING_CONFLICT: 'BOOKING_CONFLICT',
   BOOKING_INVALID_TIME: 'BOOKING_INVALID_TIME',
   BOOKING_IN_PAST: 'BOOKING_IN_PAST',
+  BOOKING_TOO_MANY: 'BOOKING_TOO_MANY',
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 

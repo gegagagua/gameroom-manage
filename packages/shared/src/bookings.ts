@@ -17,6 +17,9 @@ export interface BookingDto {
   customerName: string;
   phone: string | null;
   note: string | null;
+  status: 'PENDING' | 'CONFIRMED';
+  /** Came from the public booking form. */
+  online: boolean;
 }
 
 export interface BookingsDayResponse {
@@ -24,6 +27,13 @@ export interface BookingsDayResponse {
   /** Current business day and minutes since its 14:00 (negative before opening). */
   now: { date: string; minute: number };
   items: BookingDto[];
+}
+
+/** Public view of a day: which devices are taken, with no customer details. */
+export interface PublicAvailability {
+  date: string;
+  now: { date: string; minute: number };
+  busy: { device: string; startMinute: number; endMinute: number }[];
 }
 
 /** 0 → "14:00", 600 → "00:00", 720 → "02:00" */

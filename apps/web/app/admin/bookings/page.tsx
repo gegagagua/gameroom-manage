@@ -6,6 +6,7 @@ import {
   BOOKING_SLOTS,
   BOOKING_STEP_MINUTES,
   bookingClock,
+  type BookingDto,
   type BookingsDayResponse,
 } from '@grm/shared';
 import { useState, type ReactNode } from 'react';
@@ -52,6 +53,16 @@ export default function BookingsPage() {
     refreshInterval: REFRESH_MS,
     keepPreviousData: true,
   });
+
+  const { data: pending } = useSWR<{ items: BookingDto[] }>('/bookings/pending', { refreshInterval: REFRESH_MS });
+  const openBooking = (booking: BookingDto) =>
+    setDraft({
+      booking,
+      date: booking.date,
+      startMinute: booking.startMinute,
+      endMinute: booking.endMinute,
+      devices: booking.devices,
+    });
 
   const shown = data?.date === date ? data : undefined;
   const items = shown?.items ?? [];
@@ -109,6 +120,25 @@ export default function BookingsPage() {
         }
       />
 
+      {!!pending?.items.length && (
+        <section className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2">
+          <h2 className="mr-1 text-sm font-semibold text-amber-200">{t('bookings.pendingTitle', { n: pending.items.length })}</h2>
+          {pending.items.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => {
+                setDate(b.date);
+                openBooking(b);
+              }}
+              className="rounded-lg border border-amber-300/50 bg-zinc-950/50 px-2.5 py-1 text-xs tabular-nums text-amber-100 hover:bg-amber-400/20"
+            >
+              {formatDateLabel(b.date, lang)} · {bookingClock(b.startMinute)}–{bookingClock(b.endMinute)} · {b.customerName} · ×{b.devices.length}
+            </button>
+          ))}
+        </section>
+      )}
+
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="mr-2 text-lg font-bold text-white">{formatDateLabel(date, lang)}</span>
         {showNowLine && (
@@ -127,6 +157,7 @@ export default function BookingsPage() {
           <Legend className="border-emerald-300 bg-emerald-500" label={t('bookings.legendNow')} />
           <Legend className="border-violet-400 bg-violet-600" label={t('bookings.legendUpcoming')} />
           <Legend className="border-zinc-600 bg-zinc-700" label={t('bookings.legendPast')} />
+          <Legend className="border-dashed border-amber-300 bg-amber-400" label={t('bookings.legendPending')} />
           <span>{t('bookings.legendGroup')}</span>
         </div>
       </div>
@@ -141,15 +172,7 @@ export default function BookingsPage() {
           effectiveNow={effectiveNow}
           showNowLine={showNowLine}
           onCreate={(device, start, end) => newDraft([device], start, end)}
-          onOpen={(booking) =>
-            setDraft({
-              booking,
-              date: booking.date,
-              startMinute: booking.startMinute,
-              endMinute: booking.endMinute,
-              devices: booking.devices,
-            })
-          }
+          onOpen={openBooking}
         />
       )}
 

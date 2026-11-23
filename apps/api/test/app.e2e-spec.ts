@@ -677,6 +677,37 @@ describe('Game Room API (e2e)', () => {
       expect((await admin.delete(`/api/bookings/${body.id}`)).body.code).toBe('BOOKING_NOT_FOUND');
     });
 
+    it('takes an online request as PENDING, hides customer data, and lets admin confirm it', async () => {
+      const day = '2026-10-01';
+      const form = { date: day, startMinute: 120, endMinute: 240, devices: ['PC-8', 'SONY-2'], customerName: 'Online Player', phone: '+995 555 12 34 56' };
+      await http().post('/api/public/bookings').send(form).expect(201);
+      const open = await http().get('/api/public/bookings/availability').query({ date: day }).expect(200);
+      expect(open.body.busy).toEqual([
+        { device: 'PC-8', startMinute: 120, endMinute: 240 },
+        { device: 'SONY-2', startMinute: 120, endMinute: 240 },
+      ]);
+      expect(JSON.stringify(open.body)).not.toContain('Online Player');
+      expect((await http().post('/api/public/bookings').send(form)).body.code).toBe('BOOKING_CONFLICT');
+
+      const pending = await admin.get('/api/bookings/pending').expect(200);
+      const item = pending.body.items.find((b: { customerName: string }) => b.customerName === 'Online Player');
+      expect(item).toMatchObject({ status: 'PENDING', online: true, phone: '+995555123456' });
+      const done = await admin.post(`/api/bookings/${item.id}/confirm`).expect(200);
+      expect(done.body.status).toBe('CONFIRMED');
+      expect((await http().get('/api/bookings/pending')).status).toBe(401);
+    });
+
+    it('limits the public form and ignores honeypot submissions', async () => {
+      const day = '2026-10-02';
+      const form = { date: day, customerName: 'Bot', phone: '+995599000111', startMinute: 0, endMinute: 60 };
+      await http().post('/api/public/bookings').send({ ...form, devices: ['PC-1'], website: 'spam.example' }).expect(201);
+      const seen = await http().get('/api/public/bookings/availability').query({ date: day }).expect(200);
+      expect(seen.body.busy).toEqual([]);
+      expect((await http().post('/api/public/bookings').send({ ...form, devices: ['PC-1'], endMinute: 390 })).body.code).toBe('BOOKING_INVALID_TIME');
+      for (const device of ['PC-1', 'PC-2', 'PC-3']) await http().post('/api/public/bookings').send({ ...form, devices: [device] }).expect(201);
+      expect((await http().post('/api/public/bookings').send({ ...form, devices: ['PC-4'] })).body.code).toBe('BOOKING_TOO_MANY');
+    });
+
     it('counts 01:00 as the previous business day', async () => {
       const target = new Date('2027-02-01T21:00:00.000Z').getTime(); // 01:00 on Feb 2 in Tbilisi
       clock.advance((target - clock.now().getTime()) / 1000);
